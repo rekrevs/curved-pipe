@@ -318,6 +318,9 @@ PROGRAM MAIN
     INTEGER :: CORR_ITER, MAX_CORR      ! correction iteration counter and limit
     LOGICAL :: CORR_CONVERGED           ! correction convergence flag
 
+    ! Fox correction carry-over between D cases
+    REAL(KIND=dp) :: C0_SAVE(NRP1, NAP1), E0_SAVE(NRP1, NAP1)
+
     ! D-stepping variables
     REAL(KIND=dp) :: D_TARGET, D_CURRENT, D_STEP
     LOGICAL :: STEPPING
@@ -346,6 +349,8 @@ PROGRAM MAIN
     OMEGA(:,:,:) = 0.0_dp
     C0_CORR(:,:) = 0.0_dp
     E0_CORR(:,:) = 0.0_dp
+    C0_SAVE(:,:) = 0.0_dp
+    E0_SAVE(:,:) = 0.0_dp
 
     PI = 3.14159255_dp
     MAXSOR = 2500
@@ -502,9 +507,9 @@ PROGRAM MAIN
         CO(I) = CON * DELA(I)
       END DO
 
-      ! Initialize Fox corrections to zero for each new D case
-      C0_CORR(:,:) = 0.0_dp
-      E0_CORR(:,:) = 0.0_dp
+      ! Carry Fox corrections from previous D case as initial guess
+      C0_CORR(:,:) = C0_SAVE(:,:)
+      E0_CORR(:,:) = E0_SAVE(:,:)
 
 !------------------- Initial guess for outer iterates -------------------
 
@@ -923,6 +928,8 @@ PROGRAM MAIN
       PHI(:,:,4) = PHI(:,:,3)
       W(:,:,4) = W(:,:,3)
       OMEGA(:,:,4) = OMEGA(:,:,3)
+      C0_SAVE(:,:) = C0_CORR(:,:)
+      E0_SAVE(:,:) = E0_CORR(:,:)
       DSTART = D_TARGET
 
       PRINT *, 'Done with case D =', D_TARGET
