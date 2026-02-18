@@ -693,8 +693,11 @@ PROGRAM MAIN
           END DO
         END DO
 
-        ! Propagate wall boundary values to SOR "old" array (slice 2)
-        OMEGA(NRP1, 1:NAP1, 2) = OMEGA(NRP1, 1:NAP1, 3)
+        ! Propagate all boundary values to SOR "old" array (slice 2)
+        OMEGA(NRP1, 1:NAP1, 2) = OMEGA(NRP1, 1:NAP1, 3)   ! wall (r=1)
+        OMEGA(1,    1:NAP1, 2) = OMEGA(1,    1:NAP1, 3)   ! r=0
+        OMEGA(1:NRP1, 1,    2) = OMEGA(1:NRP1, 1,    3)   ! alpha=0
+        OMEGA(1:NRP1, NAP1, 2) = OMEGA(1:NRP1, NAP1, 3)   ! alpha=pi
 
         ! SOR for OMEGA with retry
         IRO = 0
