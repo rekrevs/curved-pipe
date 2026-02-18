@@ -4,8 +4,20 @@
 *.mod
 *.o
 
-# Binary
+# Binaries
 curved_pipe
+curved_pipe_*
+cd_central
 
 # Solver output data files
 file_D*.dat
+cd_file_D*.dat
+cd_output.txt
+baseline_upwind_output.txt
+baseline_upwind/
+
+# Diagnostic scripts
+verify_fox.py
+
+# Copyrighted papers
+qjmam*.pdf
