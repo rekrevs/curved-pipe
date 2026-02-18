@@ -249,7 +249,8 @@ CONTAINS
     DO I = 2, N1-1
       DO J = 2, N2-1
         ARR(I,J,3) = XI*ARR(I,J,1) + XIC*ARR(I,J,3)
-        IF (ABS(ARR(I,J,1)-ARR(I,J,3)) > EPS) ICV = 1
+        ! Convergence judged on *unrelaxed* update: (old-relaxed) = XIC*(old-raw)
+        IF (ABS(ARR(I,J,1)-ARR(I,J,3)) > XIC*EPS) ICV = 1
       END DO
     END DO
   END SUBROUTINE SMOOTH
@@ -333,6 +334,7 @@ PROGRAM MAIN
     REAL(KIND=dp) :: phi_max, w_max
     REAL(KIND=dp) :: phi_max_prev, w_max_prev  ! for correction convergence check
     REAL(KIND=dp) :: MAXR_PHI, MAXR_W, MAXR_OMG  ! central-discretization residuals
+    REAL(KIND=dp) :: RES_WALL                      ! wall BC residual diagnostic
 
     CALL SYSTEM_CLOCK(COUNT_RATE=clock_rate)
     CALL SYSTEM_CLOCK(COUNT=clock_start)
@@ -430,9 +432,9 @@ PROGRAM MAIN
     XI_CASES(:,5)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
     XI_CASES(:,6)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
     XI_CASES(:,7)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,8)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,9)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,10) = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
+    XI_CASES(:,8)  = (/0.85_dp, 0.50_dp, 0.90_dp, 0.85_dp/)   ! D=2000
+    XI_CASES(:,9)  = (/0.90_dp, 0.60_dp, 0.93_dp, 0.90_dp/)   ! D=3500
+    XI_CASES(:,10) = (/0.93_dp, 0.65_dp, 0.95_dp, 0.93_dp/)   ! D=5000
 
     ! Fox correction smoothing parameter omega1 (C&D eq. 21)
     ! omega1 = 1.0 means full update (no smoothing)
@@ -552,7 +554,7 @@ PROGRAM MAIN
         END IF
 
         IOUT = IOUT + 1
-        IF (.NOT. STEPPING) THEN
+        IF (.NOT. STEPPING .AND. (IOUT <= 3 .OR. MOD(IOUT,100) == 0)) THEN
           WRITE(*,'(//"OUTER ITERATION",I5//)') IOUT
         END IF
 
@@ -583,7 +585,7 @@ PROGRAM MAIN
         CALL SOR_PHI(PHI, OMEGA, B, C, RHOC, RHO, EPPS, ISOR_PHI, MAXSOR, NR, &
           NA, NRP1, NAP1, NRM1, ERROR_HANDLER)
         CALL SMOOTH(NRP1, NAP1, PHI, XI(1), XIC(1), EPS(1), ICV)
-        IF (.NOT. STEPPING) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
           CALL OUTPUT('PHI  ', ISOR_PHI, PHI(1,1,3), NR, NA)
         END IF
 
@@ -656,10 +658,10 @@ PROGRAM MAIN
         DO J = 2, NAP1
           W(1,J,3) = W(1,1,3)
         END DO
-        IF (ABS(W(1,1,1) - W(1,1,3)) .GT. EPS(2)) ICV = 1
+        IF (ABS(W(1,1,1) - W(1,1,3)) .GT. XIC(2)*EPS(2)) ICV = 1
 
         CALL SMOOTH(NRP1, NAP1, W, XI(2), XIC(2), EPS(2), ICV)
-        IF (.NOT. STEPPING) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
           CALL OUTPUT('W    ', ISOR_W, W(1,1,3), NR, NA)
         END IF
 
@@ -669,7 +671,13 @@ PROGRAM MAIN
         DO J = 2, NA
           OMEGA(NRP1,J,3) = XI(3) * OMEGA(NRP1,J,1) - XIC(3) * 2._dp * RINV2 &
             (2) * PHI(NR,J,3)
-          IF (ABS(OMEGA(NRP1,J,1) - OMEGA(NRP1,J,3)) .GT. EPS(3)) ICV = 1
+          IF (ABS(OMEGA(NRP1,J,1) - OMEGA(NRP1,J,3)) .GT. XIC(3)*EPS(3)) ICV = 1
+        END DO
+
+        ! Wall BC residual: how well does Omega_wall satisfy the Woods/Thom formula?
+        RES_WALL = 0.0_dp
+        DO J = 2, NA
+          RES_WALL = MAX(RES_WALL, ABS(OMEGA(NRP1,J,3) + 2._dp*RINV2(2)*PHI(NR,J,3)))
         END DO
 
         ! Compute OMEGA source term: w*(sin*dw/dr + cos/r*dw/dalpha) + fixed E_0
@@ -710,13 +718,16 @@ PROGRAM MAIN
         END DO OMEGA_RETRY
 
         CALL SMOOTH(NRP1, NAP1, OMEGA, XI(4), XIC(4), EPS(3), ICV)
-        IF (.NOT. STEPPING) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
           CALL OUTPUT('OMEGA', ISOR_OMEGA, OMEGA(1,1,3), NR, NA)
+        END IF
+        IF (.NOT. STEPPING .AND. (IOUT <= 3 .OR. MOD(IOUT,100) == 0)) THEN
           ! Diagnostic: field maxima and wall BC after each outer iteration
           WRITE(*,'("  DIAG: maxPHI=",ES10.3," maxW=",ES10.3,' // &
-            '" maxOMG=",ES10.3," maxOMG_wall=",ES10.3)') &
+            '" maxOMG=",ES10.3," maxOMG_wall=",ES10.3," RES_WALL=",ES10.3)') &
             MAXVAL(ABS(PHI(2:NR,2:NA,3))), MAXVAL(ABS(W(2:NR,2:NA,3))), &
-            MAXVAL(ABS(OMEGA(2:NR,2:NA,3))), MAXVAL(ABS(OMEGA(NRP1,2:NA,3)))
+            MAXVAL(ABS(OMEGA(2:NR,2:NA,3))), MAXVAL(ABS(OMEGA(NRP1,2:NA,3))), &
+            RES_WALL
         END IF
 
 !------------------- D-stepping check -----------------------------------
