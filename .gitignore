@@ -1,0 +1,11 @@
+.DS_Store
+
+# Fortran compiler artifacts
+*.mod
+*.o
+
+# Binary
+curved_pipe
+
+# Solver output data files
+file_D*.dat
