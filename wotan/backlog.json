@@ -5,6 +5,6 @@
     {"id": "T-0001", "status": "DONE", "size": "M", "summary": "Steps A+B+C: Fix convergence checking, add wall BC diagnostic, stabilise D>=2000 XI params"},
     {"id": "T-0002", "status": "DONE", "size": "S", "summary": "Step D: Make Omega SOR Jacobi boundary fully consistent", "after": ["T-0001"]},
     {"id": "T-0003", "status": "DONE", "size": "S", "summary": "Step E: Carry Fox corrections between D cases", "after": ["T-0001"]},
-    {"id": "T-0004", "status": "READY", "size": "M", "summary": "Step F: Add 2-cycle averaging stabiliser if D>=2000 still oscillates", "after": ["T-0001", "T-0002", "T-0003"]}
+    {"id": "T-0004", "status": "DONE", "size": "M", "summary": "Step F: Add 2-cycle averaging stabiliser if D>=2000 still oscillates", "after": ["T-0001", "T-0002", "T-0003"]}
   ]
 }

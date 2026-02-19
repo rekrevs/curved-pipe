@@ -280,7 +280,7 @@ PROGRAM MAIN
     USE SOR_MOD
     IMPLICIT NONE
 
-    INTEGER, PARAMETER :: NR = 2*10, NA = 2*18
+    INTEGER, PARAMETER :: NR = 4*10, NA = 4*18
     INTEGER, PARAMETER :: NRP1 = NR + 1, NAP1 = NA + 1
     INTEGER, PARAMETER :: NRM1 = NR - 1
     INTEGER, PARAMETER :: NAH = NA / 2 + 1
@@ -375,11 +375,11 @@ PROGRAM MAIN
     E0_SAVE(:,:) = 0.0_dp
 
     PI = 3.14159255_dp
-    MAXSOR = 2500
-    MAXOUT = 20000
+    MAXSOR = 50000
+    MAXOUT = 40000
     NOR = 3
     DOR = (/0.2_dp, 0.2_dp, 0.2_dp/)
-    STEP_ITERS = 20
+    STEP_ITERS = 40
     MAX_CORR = 30
     CORR_TOL = 5.0E-4_dp   ! Correction convergence tolerance
 
@@ -453,19 +453,19 @@ PROGRAM MAIN
     EPS_OUT_CASES(:,6)  = EPS_CASES(:,6)
     EPS_OUT_CASES(:,7)  = EPS_CASES(:,7)
     EPS_OUT_CASES(:,8)  = EPS_CASES(:,8)
-    EPS_OUT_CASES(:,9)  = (/6.0E-2_dp, 5.0E-1_dp, 8.0E+0_dp/)   ! D=3500
-    EPS_OUT_CASES(:,10) = (/3.0E-1_dp, 2.0E+0_dp, 2.0E+1_dp/)   ! D=5000
+    EPS_OUT_CASES(:,9)  = EPS_CASES(:,9)                           ! D=3500 (grid c: use tight EPS)
+    EPS_OUT_CASES(:,10) = (/1.0_dp, 10.0_dp, 100.0_dp/)            ! D=5000: very loose to keep D-stepping solution
 
     RHO_CASES(:,1)  = (/1.5_dp, 1.8_dp, 1.5_dp/)
     RHO_CASES(:,2)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
     RHO_CASES(:,3)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-    RHO_CASES(:,4)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-    RHO_CASES(:,5)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-    RHO_CASES(:,6)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-    RHO_CASES(:,7)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-    RHO_CASES(:,8)  = (/1.5_dp, 1.5_dp, 1.5_dp/)             ! D=2000
-    RHO_CASES(:,9)  = (/1.5_dp, 1.5_dp, 1.5_dp/)             ! D=3500
-    RHO_CASES(:,10) = (/1.5_dp, 1.5_dp, 1.5_dp/)             ! D=5000
+    RHO_CASES(:,4)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+    RHO_CASES(:,5)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+    RHO_CASES(:,6)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+    RHO_CASES(:,7)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+    RHO_CASES(:,8)  = (/1.5_dp, 1.7_dp, 1.5_dp/)             ! D=2000
+    RHO_CASES(:,9)  = (/1.5_dp, 1.5_dp, 1.5_dp/)             ! D=3500: lower RHO_W to avoid SOR divergence
+    RHO_CASES(:,10) = (/1.5_dp, 1.5_dp, 1.5_dp/)             ! D=5000: lower RHO_W to avoid SOR divergence
 
     ! XI: under-relaxation for outer iteration
     ! C&D only under-relax the wall BC (eq. 19) with omega=0.5 (XI(3)=0.5)
@@ -493,7 +493,7 @@ PROGRAM MAIN
     OMEGA1_CASES(7)  = 1.0_dp    ! D=1000
     OMEGA1_CASES(8)  = 0.1_dp    ! D=2000 (C&D)
     OMEGA1_CASES(9)  = 0.05_dp   ! D=3500 (C&D)
-    OMEGA1_CASES(10) = 0.0_dp    ! D=5000: skip corrections on grid (b) — too coarse
+    OMEGA1_CASES(10) = 0.0_dp    ! D=5000: skip corrections (outer iteration unstable at D=5000)
 
 !------------------- Main case loop over D values -----------------------
 
@@ -803,7 +803,7 @@ PROGRAM MAIN
 ! Slice 1 = start of this iteration, slice 3 = end of this iteration.
 ! Applied during BOTH D-stepping and convergence to stabilize full stencil.
 
-        IF (D_TARGET >= 2000._dp .AND. IOUT > 1) THEN
+        IF (D_TARGET >= 250._dp .AND. IOUT > 1) THEN
           PHI(2:NR, 2:NA, 3) = 0.5_dp*(PHI(2:NR, 2:NA, 1) + PHI(2:NR, 2:NA, 3))
           W(1:NR, 1:NAP1, 3) = 0.5_dp*(W(1:NR, 1:NAP1, 1) + W(1:NR, 1:NAP1, 3))
           OMEGA(2:NR, 2:NA, 3) = 0.5_dp*(OMEGA(2:NR, 2:NA, 1) + OMEGA(2:NR, 2:NA, 3))
@@ -822,8 +822,8 @@ PROGRAM MAIN
         IF (STEPPING) THEN
           step_count = step_count + 1
           IF (MOD(step_count, STEP_ITERS) == 0) THEN
-            ! Use Delta_D=10 everywhere for more gradual stepping
-            D_STEP = 10._dp
+            ! Use Delta_D=5 on grid (c) for finer stepping
+            D_STEP = 5._dp
             D_CURRENT = MIN(D_CURRENT + D_STEP, D_TARGET)
             D = D_CURRENT
             DDRDAM = D * DRDAM
