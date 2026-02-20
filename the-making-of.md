@@ -284,3 +284,35 @@ The project followed a clear arc:
 7. **Polish** — Documentation, cleanup, grid merge, Julia port, plotting
 
 A key pattern: when stuck, the workflow was to write a detailed problem description, consult ChatGPT, and paste back the instructions for Claude Code to execute. This human-orchestrated collaboration between two AI systems proved effective for solving a numerically challenging problem.
+
+---
+
+## Reflection: Method Out of the Madness
+
+**1. "Write the struggle" as a debugging technique**
+
+The most effective pattern was: when stuck, stop coding and write a comprehensive document explaining exactly what's been tried, what failed, and what the symptoms are. This happened three times (`problem_description_for_chatgpt.md` → `almost-there.md` → `still-struggling.md`), each progressively more detailed. The act of writing forced clarity, and the document doubled as a perfect prompt for the next advisor.
+
+**2. Human as orchestrator between two AIs**
+
+Claude Code served as hands (file manipulation, compilation, execution) and ChatGPT as a numerical methods consultant. The workflow was always: Claude Code documents the problem → human carries it to ChatGPT → ChatGPT returns a detailed plan → human pastes it back for Claude Code to execute. Neither AI alone could have done it — Claude Code couldn't reason deeply enough about iterative method stability, and ChatGPT couldn't touch the code.
+
+**3. Incremental extension from a working base**
+
+Never a blank page. Started with Basse's working 1972 Schubert solver, then added one thing at a time. Each wotan task (T-0001 through T-0005) was a single incremental extension, validated before moving on.
+
+**4. Relentless validation against known results**
+
+Every single change was immediately compiled and checked against C&D (1975) published values. No speculative multi-step changes without running the code. The reference table (phi_M, w_M at each D) was the North Star throughout.
+
+**5. Know when to stop thrashing**
+
+Claude Code was never allowed to spin for more than a few attempts. The moment it was clear the problem required deeper domain insight (convergence at high D), it was escalated rather than hoping for a lucky fix. The escalation wasn't "giving up" — it was routing the problem to the right tool.
+
+**6. Progressive commitment**
+
+Early on: "is this a useless exercise?", "what is D and why is it useful?" — genuine exploration before investing. Once convinced, full commitment with task tracking, commits after every step, documentation. The project went from "speculative exploration" to a polished solver with Julia port and plotting in 2.5 days.
+
+**The meta-method:**
+
+> When you're stuck on a hard technical problem with AI tools: stop, write down everything you know about the failure, use that document to consult a different perspective, then execute the advice mechanically. The key insight is that *articulating the struggle* is itself half the solution.
