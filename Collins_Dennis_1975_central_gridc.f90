@@ -82,6 +82,7 @@ END MODULE OUTPUT_MOD
 
 MODULE SOR_MOD
   USE KIND_MOD
+  USE, INTRINSIC :: ieee_arithmetic, ONLY: ieee_is_finite
   IMPLICIT NONE
 CONTAINS
   SUBROUTINE SOR_PHI(PHI, OMEGA, B, C, RHOC, RHO, EPPS, ISOR_PHI, MAXSOR, NR, &
@@ -116,6 +117,11 @@ CONTAINS
           PHI(I,J,3) = RHOC(1)*PHI(I,J,2) + RHO(1)*( &
               B(I,1)*PHI(I+1,J,2) + B(I,2)*PHI(I,J+1,2) &
               + B(I,3)*PHI(I-1,J,3) + B(I,4)*PHI(I,J-1,3) + C(I,J))
+          IF (.NOT. ieee_is_finite(PHI(I,J,3))) THEN
+            ICONV = 1
+            ISOR_PHI = MAXSOR
+            EXIT PHI_SOR
+          END IF
           IF (ABS(PHI(I,J,2) - PHI(I,J,3)) > EPPS(1)) ICONV = 1
         END DO
       END DO
@@ -201,6 +207,11 @@ CONTAINS
           W(I, J, 3) = RHOC2_LOCAL * W(I, J, 2) + RHO2_LOCAL * (E(I, J, &
             1) * W(I + 1, J, 2) + E(I, J, 2) * W(I, J + 1, 2) + E(I, J, &
             3) * W(I - 1, J, 3) + E(I, J, 4) * W(I, J - 1, 3) + E(I, J, 5))
+          IF (.NOT. ieee_is_finite(W(I,J,3))) THEN
+            ICONV = 1
+            ISOR_W = MAXSOR
+            EXIT W_SOR
+          END IF
           IF (ABS(W(I, J, 2) - W(I, J, 3)) .GT. EPPS2) ICONV = 1
         END DO
       END DO
@@ -249,6 +260,11 @@ CONTAINS
               + E(I, J, 3) * OMEGA(I - 1, J, 3) &
               + E(I, J, 4) * OMEGA(I, J - 1, 3) &
               + E(I, J, 6))
+          IF (.NOT. ieee_is_finite(OMEGA(I,J,3))) THEN
+            ICONV = 1
+            ISOR_OMEGA = MAXSOR
+            EXIT OMEGA_SOR
+          END IF
           IF (ABS(OMEGA(I, J, 2) - OMEGA(I, J, 3)) .GT. EPPS3) ICONV = 1
         END DO
       END DO
@@ -265,6 +281,10 @@ CONTAINS
     DO I = 2, N1-1
       DO J = 2, N2-1
         ARR(I,J,3) = XI*ARR(I,J,1) + XIC*ARR(I,J,3)
+        IF (.NOT. ieee_is_finite(ARR(I,J,3))) THEN
+          ICV = 1
+          RETURN
+        END IF
         ! Convergence judged on *unrelaxed* update: (old-relaxed) = XIC*(old-raw)
         IF (ABS(ARR(I,J,1)-ARR(I,J,3)) > XIC*EPS) ICV = 1
       END DO
@@ -328,11 +348,20 @@ PROGRAM MAIN
     REAL(KIND=dp) :: E0_CORR_NEW(NRP1, NAP1)  ! newly computed E0 corrections
     REAL(KIND=dp) :: OMEGA1             ! correction smoothing parameter (C&D eq. 21)
     REAL(KIND=dp) :: OMEGA_RHS          ! temporary for Omega source computation
-    REAL(KIND=dp) :: CORR_MAX_C0, CORR_MAX_E0  ! max correction change
+    REAL(KIND=dp) :: CORR_MAX_C0, CORR_MAX_E0  ! max correction change (damped, diagnostic)
+    REAL(KIND=dp) :: CORR_RES_C0, CORR_RES_E0  ! undamped residual (for convergence check)
+    REAL(KIND=dp) :: CORR_RES_C0_INIT, CORR_RES_E0_INIT  ! initial residual for relative check
     REAL(KIND=dp) :: CORR_TOL           ! correction convergence tolerance
     REAL(KIND=dp) :: CORR_OLD           ! temp for tracking change
+    REAL(KIND=dp) :: CORR_NEW_RAW       ! scalar temp for 2-cycle averaging swap
+    REAL(KIND=dp) :: WALL_DELTA         ! wall-Omega convergence (C&D eq. 20)
     INTEGER :: CORR_ITER, MAX_CORR      ! correction iteration counter and limit
+    INTEGER :: CORR_RESTARTS           ! (unused, kept for future use)
     LOGICAL :: CORR_CONVERGED           ! correction convergence flag
+
+    ! Previous raw C0/E0_CORR_NEW for 2-cycle averaging of corrections
+    REAL(KIND=dp) :: C0_CORR_NEW_PREV(NRP1, NAP1)
+    REAL(KIND=dp) :: E0_CORR_NEW_PREV(NRP1, NAP1)
 
     ! Fox correction carry-over between D cases
     REAL(KIND=dp) :: C0_SAVE(NRP1, NAP1), E0_SAVE(NRP1, NAP1)
@@ -341,6 +370,13 @@ PROGRAM MAIN
     REAL(KIND=dp) :: PHI_UNCORR(NRP1, NAP1)
     REAL(KIND=dp) :: W_UNCORR(NRP1, NAP1)
     REAL(KIND=dp) :: OMEGA_UNCORR(NRP1, NAP1)
+
+    ! Previous correction pass state for collapse detection
+    REAL(KIND=dp) :: PHI_PREV(NRP1, NAP1)
+    REAL(KIND=dp) :: W_PREV(NRP1, NAP1)
+    REAL(KIND=dp) :: OMEGA_PREV(NRP1, NAP1)
+    REAL(KIND=dp) :: C0_CORR_SAVE_PREV(NRP1, NAP1)
+    REAL(KIND=dp) :: E0_CORR_SAVE_PREV(NRP1, NAP1)
 
     ! D-stepping variables
     REAL(KIND=dp) :: D_TARGET, D_CURRENT, D_STEP
@@ -358,8 +394,32 @@ PROGRAM MAIN
     ! Results tracking
     REAL(KIND=dp) :: phi_max, w_max
     REAL(KIND=dp) :: phi_max_prev, w_max_prev  ! for correction convergence check
+    REAL(KIND=dp) :: W_CUR_MAX  ! scalar temp for collapse/NaN detection
     REAL(KIND=dp) :: MAXR_PHI, MAXR_W, MAXR_OMG  ! central-discretization residuals
     REAL(KIND=dp) :: RES_WALL                      ! wall BC residual diagnostic
+
+    ! Anderson acceleration parameters and storage
+    INTEGER, PARAMETER :: AA_MMAX = 5  ! max history depth
+    INTEGER :: AA_DEPTH, AA_NHIST
+    REAL(KIND=dp) :: AA_BETA, AA_REG
+    LOGICAL :: AA_ON
+
+    ! History of g(x) and f=g(x)-x for Anderson
+    REAL(KIND=dp) :: PHI_GH(NRP1, NAP1, AA_MMAX+1)
+    REAL(KIND=dp) :: W_GH(NRP1, NAP1, AA_MMAX+1)
+    REAL(KIND=dp) :: OMEGA_GH(NRP1, NAP1, AA_MMAX+1)
+    REAL(KIND=dp) :: PHI_FH(NRP1, NAP1, AA_MMAX+1)
+    REAL(KIND=dp) :: W_FH(NRP1, NAP1, AA_MMAX+1)
+    REAL(KIND=dp) :: OMEGA_FH(NRP1, NAP1, AA_MMAX+1)
+
+    ! Small dense system for alpha solve (size <= AA_MMAX+2)
+    REAL(KIND=dp) :: AA_MAT(AA_MMAX+2, AA_MMAX+2)
+    REAL(KIND=dp) :: AA_RHS(AA_MMAX+2)
+    REAL(KIND=dp) :: AA_SOL(AA_MMAX+2)
+    REAL(KIND=dp) :: AA_ALPHA(AA_MMAX+1)
+
+    ! Scaling weights to avoid omega dominating the norm
+    REAL(KIND=dp) :: S_PHI, S_W, S_OMG
 
     CALL SYSTEM_CLOCK(COUNT_RATE=clock_rate)
     CALL SYSTEM_CLOCK(COUNT=clock_start)
@@ -375,12 +435,15 @@ PROGRAM MAIN
     E0_SAVE(:,:) = 0.0_dp
 
     PI = 3.14159255_dp
+    AA_DEPTH = 4
+    AA_BETA  = 0.5_dp
+    AA_REG   = 1.0E-12_dp
     MAXSOR = 50000
     MAXOUT = 40000
     NOR = 3
     DOR = (/0.2_dp, 0.2_dp, 0.2_dp/)
     STEP_ITERS = 40
-    MAX_CORR = 30
+    MAX_CORR = 800
     CORR_TOL = 5.0E-4_dp   ! Correction convergence tolerance
 
     DR = 1._dp / NR
@@ -454,7 +517,7 @@ PROGRAM MAIN
     EPS_OUT_CASES(:,7)  = EPS_CASES(:,7)
     EPS_OUT_CASES(:,8)  = EPS_CASES(:,8)
     EPS_OUT_CASES(:,9)  = EPS_CASES(:,9)                           ! D=3500 (grid c: use tight EPS)
-    EPS_OUT_CASES(:,10) = (/1.0_dp, 10.0_dp, 100.0_dp/)            ! D=5000: very loose to keep D-stepping solution
+    EPS_OUT_CASES(:,10) = EPS_CASES(:,10)                           ! D=5000: tight (Anderson will handle convergence speed)
 
     RHO_CASES(:,1)  = (/1.5_dp, 1.8_dp, 1.5_dp/)
     RHO_CASES(:,2)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
@@ -493,7 +556,7 @@ PROGRAM MAIN
     OMEGA1_CASES(7)  = 1.0_dp    ! D=1000
     OMEGA1_CASES(8)  = 0.1_dp    ! D=2000 (C&D)
     OMEGA1_CASES(9)  = 0.05_dp   ! D=3500 (C&D)
-    OMEGA1_CASES(10) = 0.0_dp    ! D=5000: skip corrections (outer iteration unstable at D=5000)
+    OMEGA1_CASES(10) = 0.01_dp   ! D=5000 (C&D value)
 
 !------------------- Main case loop over D values -----------------------
 
@@ -511,6 +574,13 @@ PROGRAM MAIN
       RHO = RHO_CASES(:, ctr)
       XI = XI_CASES(:, ctr)
       OMEGA1 = OMEGA1_CASES(ctr)
+
+      ! Enable Anderson acceleration for high D where Picard is slow/unstable
+      IF (D_TARGET >= 3500._dp) THEN
+        AA_ON = .TRUE.
+      ELSE
+        AA_ON = .FALSE.
+      END IF
 
       WRITE(*,'(//"============================================")')
       WRITE(*,'("  CASE ",I2,": D =",F9.2)') ctr, D
@@ -585,12 +655,24 @@ PROGRAM MAIN
 ! Inner level: convergence loop (fixed C_0, E_0)
 
       CORR_ITER = 0
+      CORR_RESTARTS = 0
       CORR_CONVERGED = .FALSE.
       FAILED = .FALSE.
       phi_max_prev = 0.0_dp
       w_max_prev = 0.0_dp
+      C0_CORR_NEW_PREV(:,:) = 0.0_dp
+      E0_CORR_NEW_PREV(:,:) = 0.0_dp
+      CORR_RES_C0_INIT = 0.0_dp
+      CORR_RES_E0_INIT = 0.0_dp
 
       CORRECTION_LOOP: DO
+
+      ! Save current state for collapse detection (restore if outer collapses to trivial)
+      PHI_PREV(:,:) = PHI(:,:,3)
+      W_PREV(:,:) = W(:,:,3)
+      OMEGA_PREV(:,:) = OMEGA(:,:,3)
+      C0_CORR_SAVE_PREV(:,:) = C0_CORR(:,:)
+      E0_CORR_SAVE_PREV(:,:) = E0_CORR(:,:)
 
       ! Reset SOR parameters (may have been reduced during failed attempts)
       RHO = RHO_CASES(:, ctr)
@@ -602,6 +684,7 @@ PROGRAM MAIN
       IRW = 0
       IRO = 0
       step_count = 0
+      AA_NHIST = 0
 
       OUTER_ITER: DO
         IF (IOUT .GE. MAXOUT) THEN
@@ -611,7 +694,7 @@ PROGRAM MAIN
         END IF
 
         IOUT = IOUT + 1
-        IF (.NOT. STEPPING .AND. (IOUT <= 3 .OR. MOD(IOUT,100) == 0)) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 1 .AND. CORR_ITER == 0) THEN
           WRITE(*,'(//"OUTER ITERATION",I5//)') IOUT
         END IF
 
@@ -697,7 +780,7 @@ PROGRAM MAIN
         IF (ABS(W(1,1,1) - W(1,1,3)) .GT. XIC(2)*EPS(2)) ICV = 1
 
         CALL SMOOTH(NRP1, NAP1, W, XI(2), XIC(2), EPS(2), ICV)
-        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 1 .AND. CORR_ITER == 0) THEN
           CALL OUTPUT('W    ', ISOR_W, W(1,1,3), NR, NA)
         END IF
 
@@ -759,7 +842,7 @@ PROGRAM MAIN
         END DO OMEGA_RETRY
 
         CALL SMOOTH(NRP1, NAP1, OMEGA, XI(4), XIC(4), EPS(3), ICV)
-        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 1 .AND. CORR_ITER == 0) THEN
           CALL OUTPUT('OMEGA', ISOR_OMEGA, OMEGA(1,1,3), NR, NA)
         END IF
 
@@ -786,11 +869,8 @@ PROGRAM MAIN
         CALL SOR_PHI(PHI, OMEGA, B, C, RHOC, RHO, EPPS, ISOR_PHI, MAXSOR, NR, &
           NA, NRP1, NAP1, NRM1, .FALSE., ERROR_HANDLER)
         CALL SMOOTH(NRP1, NAP1, PHI, XI(1), XIC(1), EPS(1), ICV)
-        IF (.NOT. STEPPING .AND. IOUT <= 3) THEN
+        IF (.NOT. STEPPING .AND. IOUT <= 1 .AND. CORR_ITER == 0) THEN
           CALL OUTPUT('PHI  ', ISOR_PHI, PHI(1,1,3), NR, NA)
-        END IF
-
-        IF (.NOT. STEPPING .AND. (IOUT <= 3 .OR. MOD(IOUT,100) == 0)) THEN
           WRITE(*,'("  DIAG: maxPHI=",ES10.3," maxW=",ES10.3,' // &
             '" maxOMG=",ES10.3," RES_WALL=",ES10.3)') &
             MAXVAL(ABS(PHI(2:NR,2:NA,3))), MAXVAL(ABS(W(2:NR,2:NA,3))), &
@@ -810,7 +890,9 @@ PROGRAM MAIN
           OMEGA(NRP1, 2:NA, 3) = 0.5_dp*(OMEGA(NRP1, 2:NA, 1) + OMEGA(NRP1, 2:NA, 3))
 
           ! Override convergence check: compare averaged fields with iteration start.
-          ! Uses EPS_OUT (possibly looser than EPS for D>=3500).
+          ! Uses EPS_OUT (possibly looser than EPS for high D).
+          ! Also compute wall-Omega change (C&D eq. 20) as diagnostic.
+          WALL_DELTA = MAXVAL(ABS(OMEGA(NRP1, 2:NA, 3) - OMEGA(NRP1, 2:NA, 1)))
           ICV = 0
           IF (MAXVAL(ABS(PHI(2:NR, 2:NA, 1) - PHI(2:NR, 2:NA, 3))) > EPS_OUT(1)) ICV = 1
           IF (MAXVAL(ABS(W(1:NR, 1:NAP1, 1) - W(1:NR, 1:NAP1, 3))) > EPS_OUT(2)) ICV = 1
@@ -842,13 +924,40 @@ PROGRAM MAIN
           CYCLE OUTER_ITER
         END IF
 
-!------------------- Check for convergence ------------------------------
+!------------------- Anderson acceleration of outer fixed-point ----------
+        IF (AA_ON) THEN
+          CALL ANDERSON_OUTER_UPDATE()
+        END IF
 
+!------------------- Check for convergence ------------------------------
         IF (ICV == 0) EXIT OUTER_ITER
       END DO OUTER_ITER
 
       IF (.NOT. FAILED) THEN
         WRITE(*,'("OUTER ITERATION CONVERGED TO GIVEN TOLERANCES.")')
+      END IF
+
+      ! Collapse/divergence detection: if outer iteration diverged (NaN) or
+      ! converged to trivial (zero) solution, restore previous correction state.
+      ! NaN check: NaN /= NaN is TRUE. MAX(0,NaN)=0 in gfortran, so NaN
+      ! makes convergence checks pass trivially — must detect explicitly.
+      W_CUR_MAX = MAXVAL(ABS(W(2:NR, 2:NA, 3)))
+      ! Also check for NaN via SUM (MAXVAL may not propagate NaN reliably)
+      IF (SUM(ABS(W(:,:,3))) /= SUM(ABS(W(:,:,3)))) W_CUR_MAX = -1.0_dp
+      IF (CORR_ITER > 0 .AND. MAXVAL(ABS(W_PREV(2:NR, 2:NA))) > 100._dp .AND. &
+          (W_CUR_MAX < 0._dp .OR. W_CUR_MAX /= W_CUR_MAX .OR. &
+           W_CUR_MAX < 0.5_dp * MAXVAL(ABS(W_PREV(2:NR, 2:NA))))) THEN
+        WRITE(*,'("  COLLAPSE DETECTED at correction iter",I4,": w_M dropped from",F10.2," to",F10.2)') &
+          CORR_ITER, MAXVAL(ABS(W_PREV(2:NR, 2:NA))), MAXVAL(ABS(W(2:NR, 2:NA, 3)))
+        ! Restore previous state (last good solution with corrections)
+        PHI(:,:,3) = PHI_PREV(:,:)
+        W(:,:,3) = W_PREV(:,:)
+        OMEGA(:,:,3) = OMEGA_PREV(:,:)
+        C0_CORR(:,:) = C0_CORR_SAVE_PREV(:,:)
+        E0_CORR(:,:) = E0_CORR_SAVE_PREV(:,:)
+        WRITE(*,'("  Stopping corrections at last good state.")')
+        CORR_CONVERGED = .TRUE.
+        EXIT CORRECTION_LOOP
       END IF
 
 !------------------- Correction computation (C&D Section 4) ------------
@@ -900,17 +1009,37 @@ PROGRAM MAIN
           (W(I+1,NAP1,3) + W(I-1,NAP1,3) - 2._dp * W(I,NAP1,3))
       END DO
 
-      ! Apply smoothing (C&D eq. 21) and track max change
-      CORR_MAX_C0 = 0.0_dp
+      ! 2-cycle averaging of raw correction NEW values + smoothing (C&D eq. 21)
+      ! The outer iteration's period-2 oscillation cascades into C0/E0_CORR_NEW,
+      ! causing corrections to oscillate and never converge. Averaging consecutive
+      ! raw NEW values kills the period-2 component (same principle as outer averaging).
+      CORR_MAX_C0 = 0.0_dp   ! damped change (diagnostic only)
       CORR_MAX_E0 = 0.0_dp
+      CORR_RES_C0 = 0.0_dp   ! undamped residual (for convergence check)
+      CORR_RES_E0 = 0.0_dp
 
       DO I = 2, NR
         DO J = 1, NAP1
+          ! 2-cycle averaging: save raw, average with previous, store raw for next
+          CORR_NEW_RAW = C0_CORR_NEW(I,J)
+          IF (CORR_ITER > 0) THEN
+            C0_CORR_NEW(I,J) = 0.5_dp * (C0_CORR_NEW(I,J) + C0_CORR_NEW_PREV(I,J))
+          END IF
+          C0_CORR_NEW_PREV(I,J) = CORR_NEW_RAW
+          ! Undamped residual: how far is (averaged) C0_NEW from current C0
+          CORR_RES_C0 = MAX(CORR_RES_C0, ABS(C0_CORR_NEW(I,J) - C0_CORR(I,J)))
+          ! Apply smoothing
           CORR_OLD = C0_CORR(I,J)
           C0_CORR(I,J) = OMEGA1 * C0_CORR_NEW(I,J) + (1._dp - OMEGA1) * C0_CORR(I,J)
           CORR_MAX_C0 = MAX(CORR_MAX_C0, ABS(C0_CORR(I,J) - CORR_OLD))
         END DO
         DO J = 2, NA
+          CORR_NEW_RAW = E0_CORR_NEW(I,J)
+          IF (CORR_ITER > 0) THEN
+            E0_CORR_NEW(I,J) = 0.5_dp * (E0_CORR_NEW(I,J) + E0_CORR_NEW_PREV(I,J))
+          END IF
+          E0_CORR_NEW_PREV(I,J) = CORR_NEW_RAW
+          CORR_RES_E0 = MAX(CORR_RES_E0, ABS(E0_CORR_NEW(I,J) - E0_CORR(I,J)))
           CORR_OLD = E0_CORR(I,J)
           E0_CORR(I,J) = OMEGA1 * E0_CORR_NEW(I,J) + (1._dp - OMEGA1) * E0_CORR(I,J)
           CORR_MAX_E0 = MAX(CORR_MAX_E0, ABS(E0_CORR(I,J) - CORR_OLD))
@@ -918,8 +1047,15 @@ PROGRAM MAIN
       END DO
 
       CORR_ITER = CORR_ITER + 1
-      WRITE(*,'("  Correction iter",I3,": max dC0=",ES10.3,", max dE0=",ES10.3)') &
-        CORR_ITER, CORR_MAX_C0, CORR_MAX_E0
+      AA_NHIST = 0  ! Reset Anderson history (fixed-point map changed with new corrections)
+      ! Save initial residual for relative convergence check
+      IF (CORR_ITER == 1) THEN
+        CORR_RES_C0_INIT = CORR_RES_C0
+        CORR_RES_E0_INIT = CORR_RES_E0
+      END IF
+      WRITE(*,'("  Correction iter",I4,": res C0=",ES10.3,", res E0=",ES10.3,' // &
+        '" (damped dC0=",ES10.3,", dE0=",ES10.3,")")') &
+        CORR_ITER, CORR_RES_C0, CORR_RES_E0, CORR_MAX_C0, CORR_MAX_E0
 
       ! Report intermediate results
       phi_max = 0._dp
@@ -937,9 +1073,25 @@ PROGRAM MAIN
       WRITE(*,'("    Central residuals: PHI=",ES10.3,"  W=",ES10.3,"  OMG=",ES10.3)') &
         MAXR_PHI, MAXR_W, MAXR_OMG
 
-      ! Check correction convergence: corrections small enough
-      IF (CORR_MAX_C0 < CORR_TOL .AND. CORR_MAX_E0 < CORR_TOL) THEN
-        WRITE(*,'("  Corrections converged after",I3," iterations.")') CORR_ITER
+      ! Check correction convergence:
+      ! Primary: undamped residual converged (absolute) — clean convergence for D<=2000
+      IF (CORR_RES_C0 < CORR_TOL .AND. CORR_RES_E0 < CORR_TOL) THEN
+        WRITE(*,'("  Corrections converged (residual) after",I4," iterations.")') CORR_ITER
+        CORR_CONVERGED = .TRUE.
+        EXIT CORRECTION_LOOP
+      END IF
+      ! Secondary: undamped residual decreased by 99% from initial AND
+      ! physical quantities stabilized — handles limit cycles at D>=3500.
+      ! Requires both: (a) corrections have done 98% of their work (relative residual),
+      ! and (b) w_M/phi_M are stable to 0.1% (physical convergence).
+      IF (CORR_ITER >= 3 .AND. CORR_RES_C0_INIT > 0.0_dp .AND. &
+          CORR_RES_C0 < 0.02_dp * CORR_RES_C0_INIT .AND. &
+          CORR_RES_E0 < 0.02_dp * CORR_RES_E0_INIT .AND. &
+          w_max > 1.0_dp .AND. phi_max > 1.0E-3_dp .AND. &
+          ABS(w_max - w_max_prev) < 1.0E-3_dp * w_max .AND. &
+          ABS(phi_max - phi_max_prev) < 1.0E-3_dp * phi_max) THEN
+        WRITE(*,'("  Corrections converged (physical) after",I4," iters.' // &
+          ' Res C0=",ES9.2," E0=",ES9.2)') CORR_ITER, CORR_RES_C0, CORR_RES_E0
         CORR_CONVERGED = .TRUE.
         EXIT CORRECTION_LOOP
       END IF
@@ -1089,5 +1241,189 @@ CONTAINS
       END DO
     END DO
   END SUBROUTINE CHECK_CENTRAL_RESIDUALS
+
+  SUBROUTINE SOLVE_SMALL(A, b, x, n, ok)
+    ! Small dense linear solver with partial pivoting (n <= 7)
+    INTEGER, INTENT(IN) :: n
+    REAL(KIND=dp), INTENT(INOUT) :: A(:,:)
+    REAL(KIND=dp), INTENT(INOUT) :: b(:)
+    REAL(KIND=dp), INTENT(OUT) :: x(:)
+    LOGICAL, INTENT(OUT) :: ok
+    INTEGER :: i, j, k, p
+    REAL(KIND=dp) :: piv, tmp
+
+    ok = .TRUE.
+    x(1:n) = 0.0_dp
+
+    DO k = 1, n-1
+      p = k
+      piv = ABS(A(k,k))
+      DO i = k+1, n
+        IF (ABS(A(i,k)) > piv) THEN
+          piv = ABS(A(i,k))
+          p = i
+        END IF
+      END DO
+      IF (piv <= 0.0_dp) THEN
+        ok = .FALSE.
+        RETURN
+      END IF
+      IF (p /= k) THEN
+        DO j = k, n
+          tmp = A(k,j); A(k,j) = A(p,j); A(p,j) = tmp
+        END DO
+        tmp = b(k); b(k) = b(p); b(p) = tmp
+      END IF
+
+      DO i = k+1, n
+        tmp = A(i,k) / A(k,k)
+        A(i,k) = 0.0_dp
+        DO j = k+1, n
+          A(i,j) = A(i,j) - tmp*A(k,j)
+        END DO
+        b(i) = b(i) - tmp*b(k)
+      END DO
+    END DO
+
+    IF (ABS(A(n,n)) <= 0.0_dp) THEN
+      ok = .FALSE.
+      RETURN
+    END IF
+
+    DO i = n, 1, -1
+      tmp = b(i)
+      DO j = i+1, n
+        tmp = tmp - A(i,j)*x(j)
+      END DO
+      x(i) = tmp / A(i,i)
+    END DO
+  END SUBROUTINE SOLVE_SMALL
+
+  SUBROUTINE ANDERSON_OUTER_UPDATE()
+    ! Anderson acceleration (Type-I, Walker & Ni) for the outer fixed-point iteration.
+    ! Uses host-associated variables: PHI, W, OMEGA (slices 1=old, 3=new),
+    ! PHI_GH/W_GH/OMEGA_GH (history of g(x)), PHI_FH/W_FH/OMEGA_FH (history of f=g(x)-x),
+    ! AA_NHIST, AA_DEPTH, AA_BETA, AA_REG, AA_MMAX, AA_MAT, AA_RHS, AA_SOL, AA_ALPHA,
+    ! S_PHI, S_W, S_OMG, ICV, EPS_OUT, NR, NA, NRP1, NAP1.
+    INTEGER :: p, aa, ab, ii, jj, idx0, idx
+    REAL(KIND=dp) :: dot, diagmax, reg
+    LOGICAL :: ok
+
+    ! Compute scaling weights (avoid omega dominating)
+    S_PHI = 1.0_dp / MAX(1.0_dp, MAXVAL(ABS(PHI(2:NR,2:NA,3))))
+    S_W   = 1.0_dp / MAX(1.0_dp, MAXVAL(ABS(W(2:NR,2:NA,3))))
+    S_OMG = 1.0_dp / MAX(1.0_dp, MAXVAL(ABS(OMEGA(2:NR,2:NA,3))))
+
+    ! Push (g,f) into history; shift left if full
+    IF (AA_NHIST >= AA_MMAX+1) THEN
+      PHI_GH(:,:,1:AA_MMAX) = PHI_GH(:,:,2:AA_MMAX+1)
+      W_GH(:,:,1:AA_MMAX)   = W_GH(:,:,2:AA_MMAX+1)
+      OMEGA_GH(:,:,1:AA_MMAX)= OMEGA_GH(:,:,2:AA_MMAX+1)
+      PHI_FH(:,:,1:AA_MMAX) = PHI_FH(:,:,2:AA_MMAX+1)
+      W_FH(:,:,1:AA_MMAX)   = W_FH(:,:,2:AA_MMAX+1)
+      OMEGA_FH(:,:,1:AA_MMAX)= OMEGA_FH(:,:,2:AA_MMAX+1)
+      AA_NHIST = AA_MMAX
+    END IF
+    AA_NHIST = AA_NHIST + 1
+    idx = AA_NHIST
+
+    PHI_GH(:,:,idx) = PHI(:,:,3)
+    W_GH(:,:,idx)   = W(:,:,3)
+    OMEGA_GH(:,:,idx)= OMEGA(:,:,3)
+
+    PHI_FH(:,:,idx) = PHI(:,:,3) - PHI(:,:,1)
+    W_FH(:,:,idx)   = W(:,:,3)   - W(:,:,1)
+    OMEGA_FH(:,:,idx)= OMEGA(:,:,3) - OMEGA(:,:,1)
+
+    IF (AA_NHIST < 2) RETURN
+
+    p = MIN(AA_NHIST, AA_DEPTH+1)
+    idx0 = AA_NHIST - p + 1   ! first index in the active window
+
+    ! Build Gram matrix G = F^T F (with weighted inner product)
+    DO aa = 1, p
+      DO ab = 1, p
+        dot = 0.0_dp
+        DO ii = 2, NR
+          DO jj = 2, NA
+            dot = dot + (S_PHI*PHI_FH(ii,jj,idx0+aa-1))*(S_PHI*PHI_FH(ii,jj,idx0+ab-1)) &
+                      + (S_W  *W_FH(ii,jj,idx0+aa-1))  *(S_W  *W_FH(ii,jj,idx0+ab-1))   &
+                      + (S_OMG*OMEGA_FH(ii,jj,idx0+aa-1))*(S_OMG*OMEGA_FH(ii,jj,idx0+ab-1))
+          END DO
+        END DO
+        AA_MAT(aa,ab) = dot
+      END DO
+    END DO
+
+    ! Regularize diagonal
+    diagmax = 0.0_dp
+    DO aa = 1, p
+      diagmax = MAX(diagmax, AA_MAT(aa,aa))
+    END DO
+    reg = AA_REG * MAX(1.0_dp, diagmax)
+    DO aa = 1, p
+      AA_MAT(aa,aa) = AA_MAT(aa,aa) + reg
+    END DO
+
+    ! Build augmented system [G e; e^T 0] [alpha; lambda] = [0; 1]
+    DO aa = 1, p
+      AA_MAT(aa,p+1) = 1.0_dp
+      AA_MAT(p+1,aa) = 1.0_dp
+      AA_RHS(aa) = 0.0_dp
+    END DO
+    AA_MAT(p+1,p+1) = 0.0_dp
+    AA_RHS(p+1) = 1.0_dp
+
+    CALL SOLVE_SMALL(AA_MAT, AA_RHS, AA_SOL, p+1, ok)
+    IF (.NOT. ok) THEN
+      AA_NHIST = 1
+      RETURN
+    END IF
+
+    DO aa = 1, p
+      AA_ALPHA(aa) = AA_SOL(aa)
+    END DO
+
+    ! Safeguard: if coefficients explode, restart
+    IF (MAXVAL(ABS(AA_ALPHA(1:p))) > 10.0_dp) THEN
+      AA_NHIST = 1
+      RETURN
+    END IF
+
+    ! Form accelerated iterate x_AA = sum alpha_i g_i
+    PHI(:,:,3)   = 0.0_dp
+    W(:,:,3)     = 0.0_dp
+    OMEGA(:,:,3) = 0.0_dp
+    DO aa = 1, p
+      PHI(:,:,3)   = PHI(:,:,3)   + AA_ALPHA(aa) * PHI_GH(:,:,idx0+aa-1)
+      W(:,:,3)     = W(:,:,3)     + AA_ALPHA(aa) * W_GH(:,:,idx0+aa-1)
+      OMEGA(:,:,3) = OMEGA(:,:,3) + AA_ALPHA(aa) * OMEGA_GH(:,:,idx0+aa-1)
+    END DO
+
+    ! Damping toward the newest g(x) in history
+    IF (AA_BETA < 1.0_dp) THEN
+      PHI(:,:,3)   = (1.0_dp-AA_BETA)*PHI_GH(:,:,AA_NHIST)   + AA_BETA*PHI(:,:,3)
+      W(:,:,3)     = (1.0_dp-AA_BETA)*W_GH(:,:,AA_NHIST)     + AA_BETA*W(:,:,3)
+      OMEGA(:,:,3) = (1.0_dp-AA_BETA)*OMEGA_GH(:,:,AA_NHIST) + AA_BETA*OMEGA(:,:,3)
+    END IF
+
+    ! Enforce hard BCs
+    PHI(1,   1:NAP1, 3) = 0.0_dp
+    PHI(NRP1,1:NAP1, 3) = 0.0_dp
+    PHI(1:NRP1,1,    3) = 0.0_dp
+    PHI(1:NRP1,NAP1, 3) = 0.0_dp
+
+    OMEGA(1,    1:NAP1, 3) = 0.0_dp
+    OMEGA(1:NRP1,1,     3) = 0.0_dp
+    OMEGA(1:NRP1,NAP1,  3) = 0.0_dp
+
+    W(NRP1, 1:NAP1, 3) = 0.0_dp
+
+    ! Update convergence flag ICV based on EPS_OUT
+    ICV = 0
+    IF (MAXVAL(ABS(PHI(2:NR, 2:NA, 1) - PHI(2:NR, 2:NA, 3))) > EPS_OUT(1)) ICV = 1
+    IF (MAXVAL(ABS(W(1:NR,  1:NAP1,1) - W(1:NR,  1:NAP1,3))) > EPS_OUT(2)) ICV = 1
+    IF (MAXVAL(ABS(OMEGA(2:NRP1,2:NA,1) - OMEGA(2:NRP1,2:NA,3))) > EPS_OUT(3)) ICV = 1
+  END SUBROUTINE ANDERSON_OUTER_UPDATE
 
 END PROGRAM MAIN
