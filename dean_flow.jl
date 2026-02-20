@@ -306,7 +306,7 @@ function sor_phi!(PHI::Array{Float64,3}, OMEGA::Array{Float64,3},
     isor_phi = 0
     NR_INNER = NR  # always full stencil (USE_PARABOLIC_WALL=false)
 
-    while true
+    @fastmath while true
         iconv = 0
         @inbounds for i in 2:NR_INNER
             for j in 2:NA
@@ -350,7 +350,7 @@ function sor_w!(W::Array{Float64,3}, E::Array{Float64,3},
     rho2 = RHO2_in
     iconv = 0
 
-    while true
+    @fastmath while true
         if isor_w >= MAXSOR
             @printf("SOR FOR W FAILED WITH SOR FACTOR =%6.2f\n", rho2)
             if irw >= NOR
@@ -444,7 +444,7 @@ function sor_omega!(OMEGA::Array{Float64,3}, E::Array{Float64,3},
     isor_omega = 0
     iconv = 0
 
-    while true
+    @fastmath while true
         if isor_omega >= MAXSOR
             @printf("SOR FOR OMEGA FAILED WITH SOR FACTOR =%6.2f\n", RHO3)
             break
@@ -481,7 +481,7 @@ end
 function smooth!(ARR::Array{Float64,3}, XI::Float64, XIC::Float64,
                  EPS::Float64, N1::Int, N2::Int)
     icv = 0
-    @inbounds for i in 2:N1-1, j in 2:N2-1
+    @fastmath @inbounds for i in 2:N1-1, j in 2:N2-1
         ARR[i,j,SOR_NEW] = XI*ARR[i,j,ITER_START] + XIC*ARR[i,j,SOR_NEW]
         if !isfinite(ARR[i,j,SOR_NEW])
             return 1
