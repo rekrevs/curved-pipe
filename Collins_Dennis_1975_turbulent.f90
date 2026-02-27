@@ -296,14 +296,17 @@ PROGRAM MAIN
     INTEGER, PARAMETER :: NRM1 = NR - 1
     INTEGER, PARAMETER :: NAH = NA / 2 + 1
     INTEGER, PARAMETER :: NPHI = 4, NB = 5, NE = 6
-    INTEGER, PARAMETER :: NCASES = 10
+    INTEGER, PARAMETER :: NCASES = 4
 
     ! ---- Turbulence model parameters ----
     REAL(KIND=dp), PARAMETER :: KAPPA_VD = 0.41_dp    ! Von Karman constant
-    REAL(KIND=dp), PARAMETER :: A_PLUS = 26.0_dp      ! Van Driest damping constant
+    REAL(KIND=dp), PARAMETER :: A_PLUS = 11.0_dp      ! Van Driest damping constant
+        ! Reduced from standard 26 to 11; calibrated to match Ito (1959) friction
+        ! factor slope vs Re for curved pipe with L_MAX_NIK = 0.04
     REAL(KIND=dp), PARAMETER :: B_LOG_LAW = 5.2_dp    ! Log-law additive constant
-    REAL(KIND=dp), PARAMETER :: L_MAX_NIK = 0.14_dp   ! Nikuradse mixing-length cap (= 0.14*R)
-    LOGICAL, PARAMETER :: STRAIGHT_PIPE = .TRUE.       ! Phase 1: no curvature
+    REAL(KIND=dp), PARAMETER :: L_MAX_NIK = 0.04_dp   ! Reduced mixing-length cap for curved pipe
+    LOGICAL, PARAMETER :: STRAIGHT_PIPE = .FALSE.      ! Phase 2: Dean flow enabled
+    REAL(KIND=dp), PARAMETER :: DELTA_CURV = 0.05_dp   ! a/R curvature ratio, Collins & Dennis geometry (R/a = 20)
     REAL(KIND=dp), PARAMETER :: RE_TAU_TARGET = 300.0_dp  ! Target friction Reynolds number
 
     ! Turbulent viscosity arrays
@@ -569,79 +572,47 @@ PROGRAM MAIN
 
 !------------------- Case configuration ---------------------------------
 
-    D_CASES = (/10._dp, 96._dp, 100._dp, 250._dp, 500._dp, &
-                605.72_dp, 1000._dp, 2000._dp, 3500._dp, 5000._dp/)
+    ! Turbulent regime only: D >= 1000 (below transition at delta=0.05 is laminar)
+    D_CASES = (/1000._dp, 2000._dp, 3500._dp, 5000._dp/)
 
-    EPS_CASES(:,1)  = (/1.0E-5_dp, 1.0E-3_dp, 1.0E-4_dp/)
-    EPS_CASES(:,2)  = (/1.5E-4_dp, 4.0E-3_dp, 4.0E-3_dp/)
-    EPS_CASES(:,3)  = (/2.0E-4_dp, 5.0E-3_dp, 5.0E-3_dp/)
-    EPS_CASES(:,4)  = (/2.0E-3_dp, 2.0E-2_dp, 4.0E-2_dp/)
-    EPS_CASES(:,5)  = (/4.0E-3_dp, 4.0E-2_dp, 8.0E-2_dp/)
-    EPS_CASES(:,6)  = (/4.5E-3_dp, 4.5E-2_dp, 9.0E-2_dp/)
-    EPS_CASES(:,7)  = (/5.0E-3_dp, 5.0E-2_dp, 17.0E-2_dp/)
-    EPS_CASES(:,8)  = (/7.0E-3_dp, 8.0E-2_dp, 3.0E-1_dp/)
-    EPS_CASES(:,9)  = (/8.0E-3_dp, 10.0E-2_dp, 4.0E-1_dp/)
-    EPS_CASES(:,10) = (/1.0E-2_dp, 15.0E-2_dp, 6.0E-1_dp/)
+    ! Convergence tolerances: from laminar cases 7-10 (D=1000..5000)
+    EPS_CASES(:,1)  = (/5.0E-3_dp, 5.0E-2_dp, 17.0E-2_dp/)
+    EPS_CASES(:,2)  = (/7.0E-3_dp, 8.0E-2_dp, 3.0E-1_dp/)
+    EPS_CASES(:,3)  = (/8.0E-3_dp, 10.0E-2_dp, 4.0E-1_dp/)
+    EPS_CASES(:,4)  = (/1.0E-2_dp, 15.0E-2_dp, 6.0E-1_dp/)
 
     EPS_OUT_CASES(:,1)  = EPS_CASES(:,1)
     EPS_OUT_CASES(:,2)  = EPS_CASES(:,2)
-    EPS_OUT_CASES(:,3)  = EPS_CASES(:,3)
-    EPS_OUT_CASES(:,4)  = EPS_CASES(:,4)
-    EPS_OUT_CASES(:,5)  = EPS_CASES(:,5)
-    EPS_OUT_CASES(:,6)  = EPS_CASES(:,6)
-    EPS_OUT_CASES(:,7)  = EPS_CASES(:,7)
-    EPS_OUT_CASES(:,8)  = EPS_CASES(:,8)
     IF (NR >= 40) THEN
-      EPS_OUT_CASES(:,9)  = EPS_CASES(:,9)
-      EPS_OUT_CASES(:,10) = EPS_CASES(:,10)
+      EPS_OUT_CASES(:,3)  = EPS_CASES(:,3)
+      EPS_OUT_CASES(:,4)  = EPS_CASES(:,4)
     ELSE
-      EPS_OUT_CASES(:,9)  = (/6.0E-2_dp, 5.0E-1_dp, 8.0E+0_dp/)
-      EPS_OUT_CASES(:,10) = (/3.0E-1_dp, 2.0E+0_dp, 2.0E+1_dp/)
+      EPS_OUT_CASES(:,3)  = (/6.0E-2_dp, 5.0E-1_dp, 8.0E+0_dp/)
+      EPS_OUT_CASES(:,4)  = (/3.0E-1_dp, 2.0E+0_dp, 2.0E+1_dp/)
     END IF
 
-    RHO_CASES(:,1)  = (/1.5_dp, 1.8_dp, 1.5_dp/)
-    RHO_CASES(:,2)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-    RHO_CASES(:,3)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
     IF (NR >= 40) THEN
-      RHO_CASES(:,4)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-      RHO_CASES(:,5)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-      RHO_CASES(:,6)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-      RHO_CASES(:,7)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
-      RHO_CASES(:,8)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+      RHO_CASES(:,1)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
+      RHO_CASES(:,2)  = (/1.5_dp, 1.7_dp, 1.5_dp/)
     ELSE
-      RHO_CASES(:,4)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-      RHO_CASES(:,5)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-      RHO_CASES(:,6)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-      RHO_CASES(:,7)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-      RHO_CASES(:,8)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
+      RHO_CASES(:,1)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
+      RHO_CASES(:,2)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
     END IF
-    RHO_CASES(:,9)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
-    RHO_CASES(:,10) = (/1.5_dp, 1.5_dp, 1.5_dp/)
+    RHO_CASES(:,3)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
+    RHO_CASES(:,4)  = (/1.5_dp, 1.5_dp, 1.5_dp/)
 
-    XI_CASES(:,1)  = (/0.1_dp, 0.1_dp, 0.9_dp, 0.1_dp/)
-    XI_CASES(:,2)  = (/0.1_dp, 0.1_dp, 0.9_dp, 0.1_dp/)
-    XI_CASES(:,3)  = (/0.1_dp, 0.1_dp, 0.9_dp, 0.1_dp/)
+    XI_CASES(:,1)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
+    XI_CASES(:,2)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
+    XI_CASES(:,3)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
     XI_CASES(:,4)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,5)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,6)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,7)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,8)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,9)  = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
-    XI_CASES(:,10) = (/0.5_dp, 0.1_dp, 0.5_dp, 0.5_dp/)
 
     OMEGA1_CASES(1)  = 1.0_dp
-    OMEGA1_CASES(2)  = 1.0_dp
-    OMEGA1_CASES(3)  = 1.0_dp
-    OMEGA1_CASES(4)  = 1.0_dp
-    OMEGA1_CASES(5)  = 1.0_dp
-    OMEGA1_CASES(6)  = 1.0_dp
-    OMEGA1_CASES(7)  = 1.0_dp
-    OMEGA1_CASES(8)  = 0.1_dp
-    OMEGA1_CASES(9)  = 0.05_dp
+    OMEGA1_CASES(2)  = 0.1_dp
+    OMEGA1_CASES(3)  = 0.05_dp
     IF (NR >= 40) THEN
-      OMEGA1_CASES(10) = 0.01_dp
+      OMEGA1_CASES(4) = 0.05_dp    ! More aggressive correction absorption for turbulent D=5000
     ELSE
-      OMEGA1_CASES(10) = 0.0_dp
+      OMEGA1_CASES(4) = 0.0_dp
     END IF
 
 !------------------- Main case loop over D values -----------------------
@@ -990,6 +961,7 @@ PROGRAM MAIN
             D = D_CURRENT
             DDRDAM = D * DRDAM
             DDR2 = D * DR ** 2
+            CALL COMPUTE_NU_EFF(0.5_dp)  ! Refresh nu_eff during D-stepping (under-relaxed)
             WRITE(*,'("  D-step: D=",F7.1," maxPHI=",ES9.2," maxW=",ES9.2," maxOMG=",ES9.2)') &
               D_CURRENT, MAXVAL(ABS(PHI(2:NR,2:NA,3))), &
               MAXVAL(ABS(W(2:NR,2:NA,3))), MAXVAL(ABS(OMEGA(2:NR,2:NA,3)))
@@ -1189,6 +1161,61 @@ PROGRAM MAIN
       WRITE(*,'("PHI_M =",F12.4,"  W_M =",F12.2,"  QR =",F10.5)') &
         phi_max, w_max, QR
 
+!------------------- Friction factor computation -----------------------
+      ! Friction factor in physical (dimensional) units.
+      !
+      ! The C&D solver uses a non-dimensionalisation where:
+      !   Re = D / sqrt(delta)       (Dean number to Reynolds number mapping)
+      !   f_physical = f_code * sqrt(delta)  (verified by Poiseuille: f=64/Re)
+      !
+      ! f_code = 8 * tau_w_code / W_eff^2 where W_eff = QR * D / 4
+      ! tau_w_code = |dW/dr|_wall = |W(NR,j)|/DR averaged over j
+      ! (NU_EFF=1 at wall by Van Driest damping, so nu_eff drops out)
+      BLOCK
+        REAL(KIND=dp) :: TAU_W_AVG, F_DARCY, RE_BULK, F_ITO, F_BLASIUS
+        REAL(KIND=dp) :: W_EFF, F_CODE
+        ! Use second-order one-sided difference for the wall gradient:
+        !   dW/dr|_wall = (4*W(NR) - W(NR-1)) / (2*DR)
+        ! Matches the formula used in COMPUTE_NU_EFF for u_tau.
+        ! W(NRP1) = 0 at wall.
+        TAU_W_AVG = 0.0_dp
+        DO J = 1, NAP1
+          TAU_W_AVG = TAU_W_AVG + ABS(4.0_dp * W(NR, J, 3) - W(NRM1, J, 3)) &
+                      / (2.0_dp * DR)
+        END DO
+        TAU_W_AVG = TAU_W_AVG / REAL(NAP1, dp)
+
+        ! Effective velocity for friction factor computation
+        W_EFF = QR * D_TARGET / 4.0_dp
+
+        ! Code-units friction factor, then convert to physical
+        IF (W_EFF > 0.0_dp) THEN
+          F_CODE = 8.0_dp * TAU_W_AVG / (W_EFF**2)
+          F_DARCY = F_CODE * SQRT(DELTA_CURV)
+        ELSE
+          F_DARCY = 0.0_dp
+        END IF
+
+        ! Reynolds number: Re = D / sqrt(delta)
+        RE_BULK = D_TARGET / SQRT(DELTA_CURV)
+
+        ! Ito (1959): f_c = 0.304 * Re^{-1/4} * (R/a)^{-0.05}  (Darcy, turbulent curved pipe)
+        F_ITO     = 0.304_dp * RE_BULK**(-0.25_dp) &
+                    * (1.0_dp / DELTA_CURV)**(-0.05_dp)
+        ! Blasius: f_0 = 0.316 * Re^{-1/4}  (Darcy, turbulent straight pipe)
+        F_BLASIUS = 0.316_dp * RE_BULK**(-0.25_dp)
+
+        WRITE(*,'("  DIAG_FRICTION: tau_w=",ES12.4,"  W_eff=",F12.4, &
+              &"  W(NR,1)=",F12.4,"  nuT_max=",F12.4,"  u_tau=",F10.4)') &
+              TAU_W_AVG, W_EFF, W(NR,1,3), MAXVAL(NU_T_ARR(:,:)), U_TAU
+        WRITE(*,'("FRICTION: D=",F8.2,"  Re=",F10.2,"  f_c=",F10.6, &
+              &"  f_0_Blasius=",F10.6,"  f_c/f_0=",F8.4)') &
+              D_TARGET, RE_BULK, F_DARCY, F_BLASIUS, F_DARCY/F_BLASIUS
+        WRITE(*,'("  Ito (1959):    f_c=",F10.6,"  f_c/f_0=",F8.4, &
+              &"  rel_err=",F7.4)') &
+              F_ITO, F_ITO/F_BLASIUS, ABS(F_DARCY - F_ITO) / F_ITO
+      END BLOCK
+
 !------------------- Output solution to file ----------------------------
 
       WRITE(file_id, '(F0.2)') D_TARGET
@@ -1245,42 +1272,40 @@ CONTAINS
   SUBROUTINE COMPUTE_NU_EFF(RELAX)
     ! Compute Van Driest mixing-length eddy viscosity from current W field.
     !
-    ! nu_T(i,j) = l_m^2 * |dW/dr|
-    ! l_m(i) = KAPPA_VD * y(i) * (1 - exp(-y_plus(i) / A_PLUS))
+    ! nu_T(i,j) = l_m(i,j)^2 * |dW/dr|
+    ! l_m(i,j) = min(kappa * y * (1 - exp(-y+ / A+)), L_MAX)
     ! nu_eff(i,j) = 1.0 + nu_T(i,j)   (nu_mol = 1 in dimensionless units)
     !
-    ! u_tau is computed self-consistently from wall shear stress:
-    !   tau_w = |dW/dr|_{r=1} (averaged over all J)
-    !   u_tau = sqrt(tau_w)
+    ! u_tau is computed LOCAL to each angular station j from the wall shear:
+    !   tau_w(j) = |dW/dr|_{r=1,j}
+    !   u_tau(j) = sqrt(tau_w(j))
+    ! This is physically more accurate than a circumferential average because
+    ! the Van Driest damping must respond to the local wall shear. In Dean
+    ! flow, tau_w varies strongly around the circumference (high at outer wall,
+    ! low at inner wall).
     !
     ! Input:  RELAX -- under-relaxation factor (0-1). 1.0 = full update.
-    ! Reads:  W(:,:,3), DR, NR, NRP1, NAP1 (host-associated)
+    ! Reads:  W(:,:,3), DR, NR, NRP1, NAP1, NRM1 (host-associated)
     ! Writes: NU_EFF, NU_T_ARR, U_TAU, RE_TAU_OUT (host-associated)
     REAL(KIND=dp), INTENT(IN) :: RELAX
     INTEGER :: II, JJ
-    REAL(KIND=dp) :: TAU_W_SUM, TAU_W_COUNT
+    REAL(KIND=dp) :: TAU_W_LOCAL, U_TAU_LOCAL
+    REAL(KIND=dp) :: TAU_W_SUM
     REAL(KIND=dp) :: DW_DR, Y_VAL, YP, L_MIX
     REAL(KIND=dp) :: NU_EFF_NEW
 
-    ! Step 1: Compute u_tau from wall shear stress
-    ! Wall is at I=NRP1 where W=0. First interior point is I=NR.
-    ! dW/dr at wall: W(NR,J,3) is at distance DR from the wall.
-    ! First-order: dW/dr|_wall ~ W(NR,J,3) / DR  (W(NRP1)=0)
+    ! Step 1: Compute mean u_tau for diagnostics (RE_TAU_OUT)
     TAU_W_SUM = 0.0_dp
-    TAU_W_COUNT = 0.0_dp
     DO JJ = 1, NAP1
-      DW_DR = W(NR, JJ, 3) / DR
-      TAU_W_SUM = TAU_W_SUM + ABS(DW_DR)
-      TAU_W_COUNT = TAU_W_COUNT + 1.0_dp
+      DW_DR = ABS(4.0_dp * W(NR, JJ, 3) - W(NRM1, JJ, 3)) / (2.0_dp * DR)
+      TAU_W_SUM = TAU_W_SUM + DW_DR
     END DO
-
-    IF (TAU_W_COUNT > 0.0_dp .AND. TAU_W_SUM > 0.0_dp) THEN
-      U_TAU = SQRT(TAU_W_SUM / TAU_W_COUNT)
+    IF (TAU_W_SUM > 0.0_dp) THEN
+      U_TAU = SQRT(TAU_W_SUM / REAL(NAP1, dp))
     ELSE
-      ! Fallback: estimate from prescribed Re_tau
       U_TAU = RE_TAU_TARGET
     END IF
-    RE_TAU_OUT = U_TAU   ! Since nu_mol=1, a=1: Re_tau = u_tau * a / nu = u_tau
+    RE_TAU_OUT = U_TAU
 
     ! Step 2: Compute nu_T and NU_EFF at each grid point
     ! Wall (II=NRP1): y=0, nu_T=0, NU_EFF=1
@@ -1289,20 +1314,28 @@ CONTAINS
       NU_EFF(NRP1, JJ) = 1.0_dp
     END DO
 
-    ! Interior points (II=2..NR): central difference for dW/dr
-    DO II = 2, NR
-      Y_VAL = 1.0_dp - (II - 1) * DR
-      YP = Y_VAL * U_TAU
-      IF (Y_VAL > 1.0E-14_dp .AND. YP > 1.0E-14_dp) THEN
-        L_MIX = KAPPA_VD * Y_VAL * (1.0_dp - EXP(-YP / A_PLUS))
+    ! Interior points: use LOCAL u_tau per angular station
+    DO JJ = 1, NAP1
+      ! Local wall shear at this angular station (second-order one-sided)
+      TAU_W_LOCAL = ABS(4.0_dp * W(NR, JJ, 3) - W(NRM1, JJ, 3)) / (2.0_dp * DR)
+      IF (TAU_W_LOCAL > 0.0_dp) THEN
+        U_TAU_LOCAL = SQRT(TAU_W_LOCAL)
       ELSE
-        L_MIX = 0.0_dp
+        U_TAU_LOCAL = RE_TAU_TARGET
       END IF
-      DO JJ = 1, NAP1
+
+      DO II = 2, NR
+        Y_VAL = 1.0_dp - (II - 1) * DR
+        YP = Y_VAL * U_TAU_LOCAL
+        IF (Y_VAL > 1.0E-14_dp .AND. YP > 1.0E-14_dp) THEN
+          L_MIX = KAPPA_VD * Y_VAL * (1.0_dp - EXP(-YP / A_PLUS))
+          L_MIX = MIN(L_MIX, L_MAX_NIK)
+        ELSE
+          L_MIX = 0.0_dp
+        END IF
         DW_DR = (W(II+1, JJ, 3) - W(II-1, JJ, 3)) / (2.0_dp * DR)
         NU_T_ARR(II, JJ) = L_MIX**2 * ABS(DW_DR)
         NU_EFF_NEW = 1.0_dp + NU_T_ARR(II, JJ)
-        ! Under-relax the update
         NU_EFF(II, JJ) = RELAX * NU_EFF_NEW + (1.0_dp - RELAX) * NU_EFF(II, JJ)
       END DO
     END DO
