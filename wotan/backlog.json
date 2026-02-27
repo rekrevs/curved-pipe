@@ -10,6 +10,6 @@
     {"id": "T-0006", "status": "DONE", "size": "L", "summary": "Port Dean flow solver to Julia", "after": ["T-0005"]},
     {"id": "T-0007", "status": "DONE", "size": "L", "summary": "Phase 1: New turbulent solver file + straight-pipe Van Driest validation"},
     {"id": "T-0008", "status": "DONE", "size": "L", "summary": "Phase 2: Full turbulent curved-pipe solver + Ito friction factor validation", "after": ["T-0007"]},
-    {"id": "T-0009", "status": "READY", "size": "M", "summary": "Phase 3: Turbulent vs laminar comparison and documentation", "after": ["T-0008"]}
+    {"id": "T-0009", "status": "DONE", "size": "M", "summary": "Phase 3: Turbulent vs laminar comparison and documentation", "after": ["T-0008"]}
   ]
 }

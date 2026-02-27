@@ -1216,6 +1216,21 @@ PROGRAM MAIN
               F_ITO, F_ITO/F_BLASIUS, ABS(F_DARCY - F_ITO) / F_ITO
       END BLOCK
 
+!------------------- Radial W profile for u+/y+ diagnostic ---------------
+      ! Output at symmetry plane (J=1, alpha=0, outer wall side)
+      IF (U_TAU > 1.0E-10_dp) THEN
+        DO I = 1, NRP1
+          BLOCK
+            REAL(KIND=dp) :: Y_PROF, Y_PLUS_PROF, U_PLUS_PROF
+            Y_PROF = 1.0_dp - (I - 1) * DR    ! wall distance (I=1 -> y=1, I=NRP1 -> y=0)
+            Y_PLUS_PROF = Y_PROF * U_TAU       ! y+ = y * u_tau / nu (nu=1)
+            U_PLUS_PROF = W(I, 1, 3) / U_TAU   ! u+ = W / u_tau
+            WRITE(*,'("WPROFILE: D=",F8.2,"  I=",I3,"  y+=",F12.4,"  u+=",F12.4)') &
+                  D_TARGET, I, Y_PLUS_PROF, U_PLUS_PROF
+          END BLOCK
+        END DO
+      END IF
+
 !------------------- Output solution to file ----------------------------
 
       WRITE(file_id, '(F0.2)') D_TARGET

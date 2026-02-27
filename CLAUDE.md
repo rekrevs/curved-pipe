@@ -126,6 +126,60 @@ To verify, grep for `PHI_M` in the output:
 ./cd_central 2>&1 | grep PHI_M
 ```
 
+## Turbulent solver
+
+**File**: `Collins_Dennis_1975_turbulent.f90`
+
+**Build and run**:
+```bash
+gfortran -O2 -o cd_turbulent Collins_Dennis_1975_turbulent.f90
+./cd_turbulent
+```
+
+**Turbulence model**: Van Driest mixing-length with calibrated parameters:
+- Von Karman constant kappa = 0.41
+- Van Driest damping A+ = 11 (reduced from standard 26; calibrated for curved pipe)
+- Nikuradse mixing-length cap l_max = 0.04 a (reduced for curved pipe)
+- Local wall shear: u_tau computed per angular station (not circumferential average)
+
+**Cases**: D = 1000, 2000, 3500, 5000 (turbulent regime, De_c ~ 1130 for delta = 0.05)
+
+**Grid**: NR = 40, NA = 72 (grid c only; turbulent boundary layer needs fine resolution)
+
+**Validation against Ito (1959)**:
+
+| D | Re | f_c (solver) | f_c (Ito) | rel_err |
+|------|----------|-------------|-----------|---------|
+| 1000 | 4472 | 0.0359 | 0.0320 | 12.3% |
+| 2000 | 8944 | 0.0255 | 0.0269 | 5.2% |
+| 3500 | 15652 | 0.0203 | 0.0234 | 13.4% |
+| 5000 | 22361 | 0.0178 | 0.0214 | 17.0% |
+
+All cases within 20% of Ito (1959). Automated gate: `python verify_ito.py <output>`.
+
+**Key phi_M / w_M results (turbulent vs laminar)**:
+
+| D | phi_M (turb) | phi_M (lam) | w_M (turb) | w_M (lam) |
+|------|-------------|-------------|------------|-----------|
+| 1000 | 9.52 | 9.31 | 127.8 | 140.6 |
+| 2000 | 13.94 | 13.37 | 214.6 | 234.5 |
+| 3500 | 18.44 | 17.47 | 318.5 | 347.2 |
+| 5000 | 21.83 | 20.50 | 405.3 | 402.6 |
+
+Turbulent flow has slightly stronger secondary flow (higher phi_M) but lower peak axial velocity (w_M) due to the flatter turbulent velocity profile.
+
+**Limitations**:
+- Isotropic eddy viscosity model (mixing-length) cannot capture anisotropic Reynolds stresses
+- Misses the outer-wall third vortex pair observed in DNS (Lai 1991, Huttl & Friedrich 2001)
+- A+ = 11 is empirically calibrated, not derived from theory
+- No curvature correction to the mixing-length model itself
+
+**Comparison plots**: `python plot_turbulent_comparison.py` generates:
+- `plots/turb_phi_M_comparison.png` -- phi_M vs D (laminar vs turbulent)
+- `plots/turb_w_M_comparison.png` -- w_M vs D (laminar vs turbulent)
+- `plots/turb_friction_factor.png` -- Darcy friction factor vs Re with Ito/Blasius
+- `plots/turb_uplus_profile.png` -- u+ vs y+ profiles at all D values
+
 ## Other files
 
 | File | Purpose |
@@ -135,7 +189,11 @@ To verify, grep for `PHI_M` in the output:
 | `verify_fox.py` | Algebraic verification that upwind + C_0 = central difference |
 | `problem_description_for_chatgpt.md` | Full derivation of C_0, E_0 formulae with normalisations |
 | `background.md` | Basse (2026) paper summary and physics background |
-| `wotan/dev-log/T-0001..T-0005.md` | Detailed development logs for each task |
+| `Collins_Dennis_1975_turbulent.f90` | Turbulent Dean flow solver (Van Driest mixing-length) |
+| `verify_ito.py` | Automated friction factor validation against Ito (1959) |
+| `plot_turbulent_comparison.py` | Turbulent vs laminar comparison plots |
+| `verify_loglaw.py` | Log-law profile validation for straight-pipe mode |
+| `wotan/dev-log/T-0001..T-0009.md` | Detailed development logs for each task |
 
 ## Development history
 
@@ -148,3 +206,6 @@ Starting from Basse's modernised Schubert (1972) upwind solver:
 5. **T-0004**: 2-cycle averaging stabiliser. Matched C&D phi_M at all D values. Grid (c) file created.
 6. **T-0005**: Anderson acceleration + NaN detection. Closed w_M gap at D=5000 (449.37 vs C&D 449.3).
 7. **Grid merge**: Combined grid (b) and grid (c) into single parameterised source file.
+8. **T-0007**: Turbulent solver Phase 1: Van Driest mixing-length model, validated in straight-pipe mode against log-law (Re_tau=300).
+9. **T-0008**: Turbulent solver Phase 2: Dean flow mode with variable viscosity. Calibrated A+=11, l_max=0.04. Friction factor within 20% of Ito (1959).
+10. **T-0009**: Comparison plots (phi_M, w_M, friction, u+ profiles) and documentation.
