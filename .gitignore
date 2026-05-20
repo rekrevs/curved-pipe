@@ -9,10 +9,13 @@ curved_pipe
 curved_pipe_*
 cd_central
 cd_central_c
+cd_central_regtest
+cd_turbulent
 
 # Solver output data files
 file_D*.dat
 cd_file_D*.dat
+cd_turb_D*.dat
 cd_output*.txt
 baseline_upwind_output.txt
 baseline_upwind/
