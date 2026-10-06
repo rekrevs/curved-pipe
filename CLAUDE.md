@@ -195,7 +195,7 @@ Turbulent flow has slightly stronger secondary flow (higher phi_M) but lower pea
 | `verify_loglaw.py` | Log-law profile validation for straight-pipe mode |
 | `adsd/` | ADSD-style diagnostic probes (`python -m adsd.probes trace.csv`) and retained solver skills; see `adsd/README.md` |
 | `docs/adsd/` | ADSD retrospective, probe validation, pilot results |
-| `wotan/dev-log/T-0001..T-0013.md` | Detailed development logs for each task |
+| `wotan/dev-log/T-0001..T-0014.md` | Detailed development logs for each task |
 
 ## Development history
 

@@ -22,9 +22,10 @@ task in `wotan/dev-log/`.
 | T-0010 | The reconstruction re-read as a manual ADSD run: 6 failure episodes, diagnoses, falsified remedies, gaps vs ADSD | [`retrospective.md`](retrospective.md) |
 | T-0011 | `adsd/`: solver-agnostic diagnostic probes on iteration traces + 6 retained skills (with standalone Fortran Anderson module); validated on 19 real-trace checks incl. held-out grid (c) | [`../../adsd/README.md`](../../adsd/README.md), [`probe-validation.md`](probe-validation.md) |
 | T-0012 | Pilot: two fresh agents start from the 1972 upwind solver, without vs with the library, scored against C&D | [`pilot.md`](pilot.md) |
+| T-0014 | Retain pilot lessons: probe sign-ambiguity / short-trace warnings, rate fix, optimal-relaxation report, new nonlinear Gauss–Seidel skill (7 skills total) | [`../../adsd/skills/nonlinear-gauss-seidel.md`](../../adsd/skills/nonlinear-gauss-seidel.md) |
 | T-0013 | This summary + draft feedback to the authors | [`feedback-draft.md`](feedback-draft.md) |
 
-## Findings so far
+## Findings
 
 1. **We had done ADSD by hand, but skipped the "validate the diagnosis" step.**
    Diagnoses were argued in prose for an external advisor, never measured.
@@ -42,7 +43,29 @@ task in `wotan/dev-log/`.
 3. **Thresholds do not transfer between grids; mechanisms do.** Grid (b) to
    grid (c) needed six parameters re-tuned. The probe-plus-skill pair instead
    decides from the trace whether averaging, Anderson or neither applies.
-4. **Pilot:** see [`pilot.md`](pilot.md).
+4. **Pilot (N = 1 per arm): ceiling effect.** Two fresh agents started from
+   the 1972 code, one without and one with the library. Both reached all 7
+   Dean numbers (≤ 0.16% from C&D on the same grid, identical values) in
+   about 55 min.
+   - The library changed the **route, not the outcome**. With it, the agent
+     reasoned from measured eigenvalues and found a structural fix outside
+     the library (nonlinear Gauss–Seidel; 11× faster solver). Without it,
+     the agent tuned relaxation factors by parameter scans.
+   - Both converged the full correction at D = 5000 on grid (b), which our
+     own solver skips. See [`pilot.md`](pilot.md).
+5. **The loop closed.** The pilot exposed two probe defects (magnitude
+   observables hide the sign of λ; rate overflow on quantised traces) and one
+   new skill. All three were retained in T-0014. That is ADSD's retain step,
+   fed by the agent's own run.
+
+## Open follow-ups (parked as IDEA in `wotan/backlog.json`)
+
+- **T-0015:** a sharper pilot beyond the ceiling (fewer hints, a transfer
+  task, several runs per arm).
+- **T-0016:** try nonlinear Gauss–Seidel in the main solver to converge the
+  full corrections at D = 5000 on grid (b).
+- Not scheduled: re-test whether the W→Ω→φ iteration order still matters
+  now that the stabilisers are in place (retrospective E4).
 
 ## Reuse
 

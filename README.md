@@ -124,6 +124,20 @@ The averaging threshold differs by grid resolution:
 - Grid (b) NR=20: needed for D >= 2000
 - Grid (c) NR=40: needed for D >= 250 (finer grid resolves higher instability modes)
 
+**Correction (T-0011, measured):** the "eigenvalue near -1" explanation above
+was never measured at the time. Spectral probes on per-iteration traces
+(`docs/adsd/probe-validation.md`) show:
+- Grid (c), D=500: an exact period-3 cycle (lambda = exp(2 pi i/3)), which
+  averaging maps to modulus 0.5.
+- Grid (b): a complex pair near +-45 degrees that crosses |lambda| = 1 at
+  D ~ 1400 during D-stepping and collapses the solution to zero. Averaging
+  pulls it back to |lambda| ~ 0.87.
+- No period-2 mode was observed. Averaging works because (1+lambda)/2
+  contracts any eigenvalue near the unit circle except those near +1.
+- T-0004 also reset the heavy T-0001 damping (XI 0.85-0.95 back to 0.5/0.1).
+  That damping had turned the instability into a slow period-17..47 limit
+  cycle.
+
 **Result:** All D values converged on both grids. Grid (c) matched C&D exactly:
 D=3500 phi_M=17.13 (C&D 17.13), D=5000 phi_M=19.97 (C&D 19.97). However, w_M at
 D=5000 had a 5% gap (427.7 vs C&D's 449.3) because the Fox corrections could only
@@ -170,6 +184,24 @@ files were merged into a single source with compile-time grid selection via
 `INTEGER, PARAMETER :: NR, NA`. Grid-dependent parameters (MAXSOR, STEP_ITERS,
 D_STEP, RHO_W, EPS_OUT, OMEGA1, averaging threshold) are selected by `IF (NR >= 40)`
 blocks.
+
+## ADSD follow-up (October 2026)
+
+Prompted by Chen & Yin's *Training Numerical Intelligence via Auto-Diagnosis
+and Skill Discovery* (arXiv:2610.03872), the reconstruction above was
+re-examined as a diagnose → discover → implement → retain loop (T-0010 to
+T-0014). The work produced four things:
+
+- a retrospective (`docs/adsd/retrospective.md`);
+- `adsd/`, a library of executable probes for outer-iteration traces plus
+  retained solver skills, validated on real solver traces
+  (`docs/adsd/probe-validation.md`). Measuring the diagnoses corrected the
+  T-0004 explanation above;
+- a pilot with two fresh agents (`docs/adsd/pilot.md`). Both reproduced
+  C&D to 0.16% in about an hour, with and without the library;
+- a draft note to the authors (`docs/adsd/feedback-draft.md`, not sent).
+
+Overview: `docs/adsd/README.md`.
 
 ## Results
 
@@ -230,7 +262,9 @@ attempts.md                           Pre-T-0001 debugging chronicle
 almost-there.md                       Post-T-0004 status and gap analysis
 still-struggling.md                   T-0005 v1-v12 debugging chronicle
 wotan/backlog.json                    Task tracking
-wotan/dev-log/T-0001..T-0005.md       Detailed task logs
+wotan/dev-log/T-0001..T-0014.md       Detailed task logs
+adsd/                                 ADSD probes (python -m adsd.probes), skills, validation, pilot harness
+docs/adsd/                            ADSD retrospective, probe validation, pilot, feedback draft
 ```
 
 ## References
