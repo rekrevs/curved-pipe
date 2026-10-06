@@ -242,3 +242,39 @@ def test_collapse_with_transient_after_drop():
     phi = np.concatenate([np.linspace(9.0, 11.0, 400), [3.0, 6.5, 1.0, 5.8, 0.4],
                           np.full(600, 0.09)])
     assert check_collapse(phi) is not None
+
+
+# --- T-0014: lessons from the T-0012 pilot (arm B) ---------------------------
+
+def test_magnitude_only_observables_are_flagged():
+    """max|field| hides the sign of an alternating mode (pilot: -9.3 read as +2.1)."""
+    n = np.arange(8)
+    signed = 1e-3 * (-9.3) ** n            # alternating, divergent, around a zero fixed point
+    mags = np.column_stack([np.abs(signed), 3 * np.abs(signed)])
+    findings = diagnose({"phiM": mags[:, 0], "omgM": mags[:, 1]})
+    names = [f.name for f in findings]
+    assert "sign-ambiguous" in names
+    assert "short-trace" in names
+    # a signed observable removes the ambiguity and gives the right sign
+    findings = diagnose({"phiM": mags[:, 0], "phiMid": signed})
+    assert "sign-ambiguous" not in [f.name for f in findings]
+    s = estimate_spectrum(signed[:, None])
+    assert s.eigenvalue.real == pytest.approx(-9.3, rel=0.02)
+
+
+def test_empirical_rate_finite_on_exact_convergence():
+    """Traces printed with few digits contain repeated rows (zero increments)."""
+    x = np.round(5 + 0.8 ** np.arange(60), 4)
+    s = estimate_spectrum(x[:, None])
+    assert math.isfinite(s.empirical_rate) and s.empirical_rate < 2
+
+
+def test_optimal_relaxation_reported_for_real_negative_mode():
+    """Pilot arm B: lambda ~ -9.3 on the wall vorticity -> xi = lambda/(lambda-1) ~ 0.9."""
+    xs = _linear_iterates([-9.3, 0.1], n_iter=12)
+    findings = diagnose({"a": xs[:, 0], "b": xs[:, 1]})
+    osc = [f for f in findings if f.name == "oscillation"]
+    assert osc
+    assert osc[0].data["optimal_xi"] == pytest.approx(9.3 / 10.3, abs=0.01)
+    assert "0.90" in osc[0].message
+    assert "nonlinear-gauss-seidel" in osc[0].skills      # |lambda| >> 1: strong coupling

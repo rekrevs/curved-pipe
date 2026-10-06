@@ -14,8 +14,8 @@
     {"id": "T-0010", "status": "DONE", "size": "M", "summary": "ADSD retrospective: map T-0001..T-0005 to diagnose->discover->implement->retain"},
     {"id": "T-0011", "status": "DONE", "size": "L", "summary": "ADSD library: executable diagnostic probes + retained solver skills from the C&D work", "after": ["T-0010"]},
     {"id": "T-0012", "status": "DONE", "size": "L", "summary": "ADSD pilot: fresh agent from Schubert solver, with vs without library, scored against C&D", "after": ["T-0011"]},
-    {"id": "T-0013", "status": "BLOCKED", "size": "M", "summary": "ADSD synthesis: findings write-up + draft feedback to paper authors (not posted)", "after": ["T-0012", "T-0014"], "blocker": "after T-0014"},
-    {"id": "T-0014", "status": "ONGOING", "phase": "IMPLEMENTING", "size": "M", "summary": "Retain pilot lessons: fix probe sign-loss + rate overflow, add nonlinear Gauss-Seidel skill", "after": ["T-0012"]},
+    {"id": "T-0013", "status": "ONGOING", "phase": "DOING", "size": "M", "summary": "ADSD synthesis: findings write-up + draft feedback to paper authors (not posted)", "after": ["T-0012", "T-0014"]},
+    {"id": "T-0014", "status": "DONE", "size": "M", "summary": "Retain pilot lessons: fix probe sign-loss + rate overflow, add nonlinear Gauss-Seidel skill", "after": ["T-0012"]},
     {"id": "T-0015", "status": "IDEA", "size": "L", "summary": "Sharper ADSD pilot beyond the ceiling: fewer hints / transfer task / several runs per arm"},
     {"id": "T-0016", "status": "IDEA", "size": "M", "summary": "Try nonlinear Gauss-Seidel outer iteration in main solver to converge full corrections at D=5000 on grid (b)"}
   ]

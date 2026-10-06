@@ -148,9 +148,12 @@ def estimate_spectrum(
     rho = abs(lam)
     theta = abs(math.atan2(lam.imag, lam.real))
 
+    # only pairs of resolved increments: traces printed with few digits contain
+    # repeated rows (zero increments), which would give 0 or 1e300 ratios
     dn = np.linalg.norm(ds, axis=1)
-    ratios = dn[1:] / np.maximum(dn[:-1], 1e-300)
-    ratios = ratios[ratios > 0]
+    ok = dn > 1e-9 * dn.max()
+    pair = ok[1:] & ok[:-1]
+    ratios = dn[1:][pair] / dn[:-1][pair]
     empirical = float(np.exp(np.mean(np.log(ratios)))) if len(ratios) else 0.0
 
     period = None
@@ -381,7 +384,21 @@ def diagnose(
     if f:
         findings.append(f)
 
+    if len(x) < 12:
+        findings.append(Finding(
+            "short-trace", "warning",
+            f"only {len(x)} iterations: eigenvalue estimates from so few rows are unreliable; "
+            f"trace at least ~20 iterations at a fixed parameter value.", [], {"rows": len(x)}))
+
     s = estimate_spectrum(x)
+    finite_x = x[np.all(np.isfinite(x), axis=1)]
+    if (len(finite_x) and np.all(finite_x >= 0) and s.theta < 0.1 and s.rho >= 0.9):
+        findings.append(Finding(
+            "sign-ambiguous", "warning",
+            "all observables are nonnegative magnitudes (e.g. max|field|): an alternating "
+            "mode (lambda < 0) in a field that crosses zero shows up here as lambda > 0. "
+            "Add signed point values (e.g. PHI at a fixed interior point) before trusting "
+            "the sign of lambda.", [], {"rho": s.rho}))
     sd = asdict(s)
     sd["eigenvalue"] = [s.eigenvalue.real, s.eigenvalue.imag]
     lam = f"lambda ~ {s.eigenvalue.real:+.3f}{s.eigenvalue.imag:+.3f}i (|lambda|={s.rho:.3f})"
@@ -394,17 +411,28 @@ def diagnose(
             skills.append("two-cycle-averaging")
         if s.rho >= 1.0 or s.rho_after_averaging >= 0.95:
             skills.append("anderson-acceleration")
+        if s.rho > 1.5:
+            skills.append("nonlinear-gauss-seidel")
         per = f"period-{s.period}" if s.period else "aperiodic"
         kind = (f"nonlinear (linear fit residual {s.fit_residual:.2f}), amplitude ratio "
                 f"{s.amplitude_decay:.2f} over the window" if s.nonlinear else lam)
+        msg = (f"{per} oscillation, {s.regime}: {kind}. 2-cycle averaging maps the dominant "
+               f"mode to |(1+lambda)/2| = {s.rho_after_averaging:.3f}.")
+        lam_r = s.eigenvalue.real
+        if not s.nonlinear and abs(s.theta - math.pi) < 0.1 and lam_r < 0:
+            # x <- xi*x + (1-xi)*T(x) maps lambda -> xi + (1-xi)*lambda: zero at xi*
+            xi_opt = lam_r / (lam_r - 1.0)
+            sd["optimal_xi"] = xi_opt
+            msg += (f" For this real mode the optimal relaxation weight on the old iterate is "
+                    f"xi = lambda/(lambda-1) = {xi_opt:.2f} (other modes may limit it).")
         findings.append(Finding(
-            "oscillation", "error" if s.rho >= 0.98 else "warning",
-            f"{per} oscillation, {s.regime}: {kind}. 2-cycle averaging maps the dominant "
-            f"mode to |(1+lambda)/2| = {s.rho_after_averaging:.3f}.", skills, sd))
+            "oscillation", "error" if s.rho >= 0.98 else "warning", msg, skills, sd))
     elif s.rho >= 0.95:
         skills = ["anderson-acceleration"]
         if s.regime == "divergent":
             skills.append("continuation-handoff")
+        if s.rho > 1.5:
+            skills.append("nonlinear-gauss-seidel")
         findings.append(Finding(
             "slow-monotone" if s.regime != "divergent" else "divergent", "warning",
             f"dominant mode is real positive, {s.regime}: {lam}. Under-relaxation and "

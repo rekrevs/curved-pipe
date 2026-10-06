@@ -27,6 +27,11 @@ WRITE(77,'(I6,5(",",ES16.8))') IOUT, MAXVAL(ABS(PHI(:,:,3))), MAXVAL(ABS(W(:,:,3
 Spectral estimates need a stationary map, so trace at a fixed parameter value.
 During continuation steps the map changes every few iterations.
 
+**Include signed point values**, not only max|field|. A magnitude hides the
+sign of an alternating mode. In the T-0012 pilot, λ ≈ −9.3 read as +2.1 from
+max-norms over 5 rows. The probe now warns (`sign-ambiguous`, `short-trace`).
+Trace at least ~20 iterations.
+
 ## 2. Diagnose
 
 ```bash
@@ -44,6 +49,7 @@ Exit code 1 means at least one error-level finding.
 | `check_false_convergence` | `false-convergence(-risk)` | Increments small but residual large, or a test on a relaxed increment (tolerance inflated by 1/(1−ξ)) |
 | `check_nonfinite` | `non-finite`, `masked-nan-suspect` | NaN/Inf, or an O(1) maximum that suddenly becomes exactly 0 |
 | `check_collapse` | `collapse-to-trivial` | A plateaued magnitude drops below 50% and stays down |
+| `diagnose` | `short-trace`, `sign-ambiguous` | Too few rows; only nonnegative magnitude columns, so the sign of λ is not identifiable |
 
 ## 3. Apply the skill
 
@@ -55,6 +61,7 @@ Exit code 1 means at least one error-level finding.
 | [`skills/continuation-handoff.md`](skills/continuation-handoff.md) | collapse or divergence at the start of a parameter value |
 | [`skills/nan-safe-reductions.md`](skills/nan-safe-reductions.md) + [`skills/fortran/nan_max_probe.f90`](skills/fortran/nan_max_probe.f90) | non-finite, masked NaN |
 | [`skills/deferred-correction-consistency.md`](skills/deferred-correction-consistency.md) | deferred correction converges to the wrong values |
+| [`skills/nonlinear-gauss-seidel.md`](skills/nonlinear-gauss-seidel.md) | block-Picard outer map with \|λ\| ≫ 1 (strong coupling), heavy averaging or stalling Anderson; also gives the optimal relaxation ξ = λ/(λ−1) |
 
 Each skill file lists its trigger, mechanism, implementation, pitfalls and the
 evidence it rests on.

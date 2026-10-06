@@ -27,6 +27,11 @@ It is under-relaxation with xi = 0.5 applied to the *whole coupled
 iterate*, boundary values included, after all fields have been updated.
 Per-field relaxation inside the sweep is not equivalent.
 
+**Generalisation.** A weight ξ on the old iterate maps λ → ξ + (1−ξ)λ. For
+a single real negative mode, the optimal weight is ξ = λ/(λ−1); the probe
+reports it. If |λ| ≫ 1, look at the iteration structure before tuning weights
+(`nonlinear-gauss-seidel.md`).
+
 ## Implementation
 
 Keep the iterate from the start of the outer iteration (slice 1) and average
