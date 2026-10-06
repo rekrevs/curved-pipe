@@ -1,0 +1,17 @@
+{
+  "arm": "armB",
+  "tool_calls": 52,
+  "by_tool": {
+    "Bash": 47,
+    "Read": 3,
+    "Write": 2
+  },
+  "compiles": 20,
+  "executions": 35,
+  "probe_runs": 15,
+  "cost_usd": 3.852711400000001,
+  "turns": 53,
+  "duration_ms": 3252297,
+  "terminal_reason": "completed",
+  "suspicious_access": []
+}

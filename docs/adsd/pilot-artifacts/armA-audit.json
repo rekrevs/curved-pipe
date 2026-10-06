@@ -1,0 +1,18 @@
+{
+  "arm": "armA",
+  "tool_calls": 51,
+  "by_tool": {
+    "Bash": 45,
+    "Read": 3,
+    "Write": 2,
+    "Grep": 1
+  },
+  "compiles": 18,
+  "executions": 26,
+  "probe_runs": 0,
+  "cost_usd": 2.7218764,
+  "turns": 52,
+  "duration_ms": 3304799,
+  "terminal_reason": "completed",
+  "suspicious_access": []
+}
