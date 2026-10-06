@@ -58,7 +58,7 @@ To switch grids: swap which line is commented. All arrays are statically sized f
 
 ### Iteration order: W -> Omega -> PHI
 
-This is critical. C&D Section 4, p. 140 specifies this order. PHI SOR runs last, so the wall boundary condition for Omega uses OLD PHI. This one-iteration lag stabilises the coupled iteration at high D. Changing the order (e.g. to PHI first) causes corrections to diverge.
+This is critical. C&D Section 4, p. 140 specifies this order. PHI SOR runs last, so the wall boundary condition for Omega uses OLD PHI. This one-iteration lag stabilises the coupled iteration at high D. Changing the order (e.g. to PHI first) causes corrections to diverge. (Unverified since the stabilisers were added: the order change alone did not fix the D~1430 collapse during T-0004; see `docs/adsd/retrospective.md` E4.)
 
 ### D-stepping (continuation in D)
 
@@ -79,7 +79,7 @@ Applied with smoothing: `C_0^{j+1} = omega1 * C_0_new + (1-omega1) * C_0^j`
 
 ### Stabilisation techniques
 
-- **2-cycle averaging**: `x_{n+1} = (x_n + T(x_n))/2` kills period-2 oscillation. Threshold: D >= 250 (grid c) or D >= 2000 (grid b). Applied to all three fields including wall BC.
+- **2-cycle averaging**: `x_{n+1} = (x_n + T(x_n))/2` maps each outer-map eigenvalue lambda -> (1+lambda)/2. Measured (`docs/adsd/probe-validation.md`): grid (c) D=500 has an exact period-3 cycle (lambda = exp(2*pi*i/3) -> 0.5); grid (b) has a complex pair near +-45 deg crossing |lambda|=1 at D~1400 (no period-2 mode observed). Threshold: D >= 250 (grid c) or D >= 2000 (grid b). Applied to all three fields including wall BC.
 - **Anderson acceleration**: Type-I, depth 4, beta 0.5. Enabled for D >= 3500. History reset when corrections change.
 - **Correction 2-cycle averaging**: raw C_0/E_0_NEW values are averaged with previous iteration's raw values before smoothing.
 - **Collapse detection**: if w_M drops below 50% of previous pass, restore last good state.
@@ -101,7 +101,7 @@ Shared: MAX_CORR=800, MAXOUT=40000, CORR_TOL=5e-4.
 
 ## Critical gotchas
 
-1. **gfortran MAX(a, NaN) = a**: NaN is invisible to convergence checks that use MAX for reduction. The code uses SUM-based NaN propagation and ieee_is_finite guards.
+1. **gfortran MAX/MAXVAL hide NaN**: NaN is invisible to convergence checks that use MAX for reduction (`MAXVAL` always; a running `m=MAX(m,x)` depends on -O level -- run `adsd/skills/fortran/nan_max_probe.f90`). The code uses SUM-based NaN propagation and ieee_is_finite guards.
 2. **Uncorrected solution handoff**: D-stepping resets corrections to zero. The initial guess for the next D case must be the uncorrected solution, not the corrected one. PHI_UNCORR/W_UNCORR/OMEGA_UNCORR are saved for this.
 3. **Convergence check on unrelaxed update**: The `SMOOTH` subroutine checks `ABS(old - relaxed) > XIC*EPS` (not `EPS`), because the relaxed update is `XI*old + XIC*raw`, so `old - relaxed = XIC*(old - raw)`.
 4. **Anderson coefficient safeguard**: if max|alpha| > 10, the Anderson history is reset to prevent wild extrapolation.
@@ -193,7 +193,9 @@ Turbulent flow has slightly stronger secondary flow (higher phi_M) but lower pea
 | `verify_ito.py` | Automated friction factor validation against Ito (1959) |
 | `plot_turbulent_comparison.py` | Turbulent vs laminar comparison plots |
 | `verify_loglaw.py` | Log-law profile validation for straight-pipe mode |
-| `wotan/dev-log/T-0001..T-0009.md` | Detailed development logs for each task |
+| `adsd/` | ADSD-style diagnostic probes (`python -m adsd.probes trace.csv`) and retained solver skills; see `adsd/README.md` |
+| `docs/adsd/` | ADSD retrospective, probe validation, pilot results |
+| `wotan/dev-log/T-0001..T-0013.md` | Detailed development logs for each task |
 
 ## Development history
 

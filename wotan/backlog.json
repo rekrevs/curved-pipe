@@ -12,8 +12,8 @@
     {"id": "T-0008", "status": "DONE", "size": "L", "summary": "Phase 2: Full turbulent curved-pipe solver + Ito friction factor validation", "after": ["T-0007"]},
     {"id": "T-0009", "status": "DONE", "size": "M", "summary": "Phase 3: Turbulent vs laminar comparison and documentation", "after": ["T-0008"]},
     {"id": "T-0010", "status": "DONE", "size": "M", "summary": "ADSD retrospective: map T-0001..T-0005 to diagnose->discover->implement->retain"},
-    {"id": "T-0011", "status": "ONGOING", "phase": "PLANNING", "size": "L", "summary": "ADSD library: executable diagnostic probes + retained solver skills from the C&D work", "after": ["T-0010"]},
-    {"id": "T-0012", "status": "BLOCKED", "size": "L", "summary": "ADSD pilot: fresh agent from Schubert solver, with vs without library, scored against C&D", "after": ["T-0011"], "blocker": "after T-0011"},
+    {"id": "T-0011", "status": "DONE", "size": "L", "summary": "ADSD library: executable diagnostic probes + retained solver skills from the C&D work", "after": ["T-0010"]},
+    {"id": "T-0012", "status": "ONGOING", "phase": "PLANNING", "size": "L", "summary": "ADSD pilot: fresh agent from Schubert solver, with vs without library, scored against C&D", "after": ["T-0011"]},
     {"id": "T-0013", "status": "BLOCKED", "size": "M", "summary": "ADSD synthesis: findings write-up + draft feedback to paper authors (not posted)", "after": ["T-0012"], "blocker": "after T-0012"}
   ]
 }

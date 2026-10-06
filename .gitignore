@@ -25,3 +25,7 @@ run_*.txt
 
 # Copyrighted papers
 qjmam*.pdf
+
+# Python caches
+__pycache__/
+.pytest_cache/
