@@ -92,4 +92,4 @@ a stiff integrator.
 - **A probe pitfall.** Diagnostics computed on norms or maxima can invert
   the sign of the diagnosed mode.
 
-Code, traces and the full write-up can be shared on request (private repository).
+Code, traces and the full write-up are public: https://github.com/rekrevs/curved-pipe (branch `adsd`, `docs/adsd/`).
