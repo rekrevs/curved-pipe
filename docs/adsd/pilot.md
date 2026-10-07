@@ -104,6 +104,12 @@ Both independently rediscovered most of the February 2026 history.
      change of the iteration (nonlinear Gauss–Seidel). That gave a much
      faster solver whose convergence needs no tuned constants.
    - With N = 1 per arm this is suggestive only.
+   - **The runtime gap (93 s vs 8.5 s) matters less than it looks.** Both
+     are far below the limit, and ours takes about 12 s. The measurement is
+     one run each, with different tolerances and continuation schedules. The
+     more important difference is that arm B's convergence needs no tuned
+     damping constants, while arm A's rests on scanned relaxation factors
+     that are unlikely to transfer to other grids or D ranges.
 3. **The pilot fed the retain step.** Arm B's run exposed two concrete probe
    defects (sign loss, rate overflow) and produced a new candidate skill
    (nonlinear Gauss–Seidel inner level for stiffly coupled fields).

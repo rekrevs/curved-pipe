@@ -23,7 +23,8 @@ repository.
 > 2. **There was a ceiling effect.** In a small pilot, fresh agents with and
 >    without our probe/skill library both matched the published table to
 >    0.16% in about 55 minutes. The library changed the *route*, not the
->    outcome: an eigenvalue-guided structural fix gave an 11× faster solver.
+>    outcome: an eigenvalue-guided structural fix gave a solver that converges
+>    without hand-tuned damping constants, and is 11× faster.
 >
 > Happy to share details.
 

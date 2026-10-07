@@ -58,6 +58,50 @@ task in `wotan/dev-log/`.
    new skill. All three were retained in T-0014. That is ADSD's retain step,
    fed by the agent's own run.
 
+## Assessment: what the experiment is worth
+
+Written after the pilot, for readers outside numerical analysis.
+
+**The head-to-head comparison was inconclusive.** The task sat at the ceiling
+of a 2026 frontier model, so both arms succeeded. The pilot does **not** show
+that a retained probe/skill library improves an agent's success rate. That
+needs a harder or transfer task and several runs per arm (T-0015).
+
+**The value is in the by-products:**
+
+1. **Measurement corrected our own understanding.** The documented reason
+   *why* 2-cycle averaging works was wrong. The fix was right, but the wrong
+   explanation would have steered the next attempt badly. This is the
+   paper's central point in practice: diagnoses should be measured and
+   validated, not argued.
+2. **The C&D reconstruction was independently confirmed.** Two agents that
+   never saw our code converged to the same numbers as each other and as our
+   solver, to 4–5 digits at D = 2000/3500.
+3. **An improvement path appeared.** Both agents converged the full
+   correction at D = 5000 on grid (b), which our solver skips (T-0016).
+4. **It is a progress marker.** What took 2.5 days and 101 human inputs in
+   February 2026 (Claude Code plus ChatGPT, with a human routing between
+   them) took one unattended agent 55 minutes in October. The comparison is
+   confounded, because the model generation differs and the task text was
+   written with hindsight (formulae and targets supplied). So this says more
+   about model progress and the value of a good problem statement than about
+   ADSD.
+
+**On the 11× runtime difference (93 s vs 8.5 s).** It is real, but it is not
+the important part.
+- Both solvers run far below the 10-minute limit, and ours takes about 12 s
+  on the same grid. At this problem size the speed-up is practically
+  irrelevant. It would start to matter on finer grids, which were not tested.
+- The measurement is crude: one run each, with different tolerances and
+  continuation schedules.
+- What matters more is *why* arm B is faster. Nonlinear Gauss–Seidel makes
+  the coupled iteration contract on its own, with no hand-tuned damping
+  constants. Arm A's stability rests on relaxation factors found by
+  parameter scans, and such constants tend not to survive a new grid or
+  parameter range: we had to re-tune six of them going from grid (b) to (c).
+  Robustness, not speed, is the likely real gain, and that too rests on a
+  single run.
+
 ## Open follow-ups (parked as IDEA in `wotan/backlog.json`)
 
 - **T-0015:** a sharper pilot beyond the ceiling (fewer hints, a transfer
